@@ -1,2 +1,6 @@
 **/credentials.py 
 **/___pycache__
+**/*pyc
+*.log*
+**/posts_source
+**/cookie.json
