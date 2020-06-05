@@ -4,19 +4,19 @@
 #                              Session run config                              #
 # ---------------------------------------------------------------------------- #
 
-headless_browser = False
+headless_browser = True
 
 # set_quota_supervisor
-peak_likes_hourly=30
-peak_likes_daily=300
-peak_comments_hourly=10
+peak_likes_hourly=90
+peak_likes_daily=800
+peak_comments_hourly=15
 peak_comments_daily=100
-peak_follows_hourly=30
-peak_follows_daily=300
+peak_follows_hourly=50
+peak_follows_daily=400
 peak_unfollows_hourly=40
 peak_unfollows_daily=400
-peak_server_calls_hourly=300
-peak_server_calls_daily=2000
+peak_server_calls_hourly=400
+peak_server_calls_daily=3000
 
 # set_action_delays (seconds)
 # action delay will be chosen at random each time from between these numbers and its double
@@ -30,7 +30,7 @@ story=15
 max_followers=None
 min_followers=50
 min_following=10
-min_posts=10 
+min_posts=20 
 
 # set_skip_users
 skip_private=True
@@ -48,23 +48,22 @@ do_comment_percentage = 0
 do_like_percentage = 80
 do_follow_percentage = 70
 do_follow_times = 2
-do_story_percentage = 50
+do_story_percentage = 80
 user_interact_percentage = 60
-# Sill chiise a nomber within this and 3 times it
-user_interact_amount = 1
+user_interact_amount = 2
 
 accept_follow_requests_sleep_amount = 100
 accept_follow_requests_sleep_delay = 5
 
 # Will actually use a random number between these and its double
-follow_user_followers_amount_of_accounts = 2
-follow_user_followers_amount = 10
-like_by_tags_amount_of_tags = 8
-like_by_tags_amount = 15
+follow_user_followers_amount_of_accounts = 4
+follow_user_followers_amount = 20
+like_by_tags_amount_of_tags = 10
+like_by_tags_amount = 20
 
 # Posts sources
-# https://www.instagram.com/the.sunshine.yogi/
-source = 'the.sunshine.yogi'
+# sounrce_link = https://www.instagram.com/accounts/alessiabarone1/
+source = 'alessiabarone1'
 
 # variables
 similar_accounts = [
