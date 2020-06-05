@@ -1,6 +1,8 @@
 **/credentials.py 
 **/___pycache__
 **/*pyc
+**.log*
 *.log*
 **/posts_source
 **/cookie.json
+**/workspace

@@ -53,7 +53,7 @@ user_interact_percentage = 60
 # Sill chiise a nomber within this and 3 times it
 user_interact_amount = 1
 
-accept_follow_requests_sleep_amount = 100
+accept_follow_requests_amount = 100
 accept_follow_requests_sleep_delay = 5
 
 # Will actually use a random number between these and its double

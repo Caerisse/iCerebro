@@ -1,6 +1,7 @@
 # Imports
 from instapy import InstaPy
 from instapy import smart_run
+from instapy import set_workspace
 #from instapy_cli import client
 from upload import upload
 import random
@@ -72,7 +73,8 @@ if args['interact'] == "true":
     session = InstaPy(username=insta_username,
                       password=insta_password,
                       want_check_browser=False,
-                      headless_browser=config.headless_browser)
+                      headless_browser=config.headless_browser,
+                      geckodriver_path='./{}/geckodriver'.format(insta_username))
     
     while True:
         with smart_run(session):

@@ -52,7 +52,7 @@ do_story_percentage = 80
 user_interact_percentage = 60
 user_interact_amount = 2
 
-accept_follow_requests_sleep_amount = 100
+accept_follow_requests_amount = 100
 accept_follow_requests_sleep_delay = 5
 
 # Will actually use a random number between these and its double
