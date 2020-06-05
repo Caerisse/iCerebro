@@ -27,7 +27,7 @@ unfollow=20
 story=15
 
 # set_relationship_bounds
-max_followers=None
+max_followers=7000
 min_followers=50
 min_following=10
 min_posts=20 

@@ -3,16 +3,16 @@ from instapy import InstaPy
 from instapy import smart_run
 from instapy import set_workspace
 #from instapy_cli import client
-from upload import upload
+from upload import upload_single_image
 import random
 import argparse
 import os
 import sys
 
 ap = argparse.ArgumentParser()
-ap.add_argument("-a", "--account", required=True, help="folder with account data")
-ap.add_argument("-u", "--upload", required=False, help="upload post", default="false")
-ap.add_argument("-i", "--interact", required=False, help="interact with posts and accounts", default="true")
+ap.add_argument("--account", required=True, help="folder with account data")
+ap.add_argument("--upload", required=False, help="upload post", default="false")
+ap.add_argument("--interact", required=False, help="interact with posts and accounts", default="true")
 args = vars(ap.parse_args())
 
 if args['account'].endswith('/'): args['account'] = args['account'][0:-1]
@@ -32,56 +32,57 @@ if (os.path.exists("./{}/ignored_users.txt".format(args['account']))):
             config.ignored_users.append(line.strip())
 
 
-# ---------------------------------------------------------------------------- #
-#                                  InstaPy-cli                                 #
-# ---------------------------------------------------------------------------- #
+print(insta_username)
+print(args['account'])
+# get an InstaPy session
+# set headless_browser=True to run InstaPy in the background
+session = InstaPy(  username=insta_username,
+                    password=insta_password,
+                    want_check_browser=False,
+                    headless_browser=config.headless_browser,
+                    geckodriver_path='./{}/geckodriver'.format(args['account']))
 
-# This was a test to autoupload post, instapy-cli is no longer working properly
-
-if args['upload'] == "true":
-    #cookie_file = './{}/cookie.json'.format(insta_username)
-    #with client(insta_username, insta_password, cookie_file=cookie_file, write_cookie_file=True) as cli:
-        path = './{}/posts_source/'.format(insta_username)
-        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-        files.sort()
-        post = []
-        delete = []
-        text = ""
-        base_name = files[0][0:files[0].index('.')]
-        for file_name in files:
-            if file_name.startswith(base_name):
-                delete.append(path + file_name)
-                if file_name.endswith('.txt'):
-                    text = open(path + file_name, "r").read().strip()
-                elif file_name.endswith('.jpg') or file_name.endswith('.mp4'):
-                    post.append(path + file_name)
-            else:
-                break
-        #cli.upload(post, text)
-        upload(post[0], text, insta_username, insta_password)
-        for file_name in  delete:
-            os.remove(file_name)
 
 
 # ---------------------------------------------------------------------------- #
 #                                    InstaPy                                   #
 # ---------------------------------------------------------------------------- #
+  
+while True:
+    with smart_run(session):
 
-if args['interact'] == "true":
-    # get an InstaPy session
-    # set headless_browser=True to run InstaPy in the background
-    session = InstaPy(username=insta_username,
-                      password=insta_password,
-                      want_check_browser=False,
-                      headless_browser=config.headless_browser,
-                      geckodriver_path='./{}/geckodriver'.format(insta_username))
-    
-    while True:
-        with smart_run(session):
+        if args['upload'] == "true":
+            # Get post
+            path = './{}/posts_source/'.format(args['account'])
+            files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+            files.sort()
+            post = []
+            delete = []
+            text = ""
+            base_name = files[0][0:files[0].index('.')]
+            for file_name in files:
+                if file_name.startswith(base_name):
+                    delete.append(path + file_name)
+                    if file_name.endswith('.txt'):
+                        text = open(path + file_name, "r").read().strip()
+                    elif file_name.endswith('.jpg') or file_name.endswith('.mp4'):
+                        post.append(file_name)
+                else:
+                    break
 
-# ---------------------------------------------------------------------------- #
-#                               General Settings                               #
-# ---------------------------------------------------------------------------- #
+            #Upload!
+            upload_single_image(post[0], text, args['account'], session)
+
+            # Remove files related to the uploaded pic
+            for file_name in  delete:
+                os.remove(file_name)
+
+
+
+        if args['interact'] == "true":
+            # ---------------------------------------------------------------------------- #
+            #                               General Settings                               #
+            # ---------------------------------------------------------------------------- #
     
             # dont stop following these people
             session.set_dont_include(config.friend_list)
@@ -154,9 +155,9 @@ if args['interact'] == "true":
             session.set_delimit_liking( enabled=True, max_likes=None, min_likes=50 )
     
     
-    # ---------------------------------------------------------------------------- #
-    #                               Activity Settings                              #
-    # ---------------------------------------------------------------------------- #
+            # ---------------------------------------------------------------------------- #
+            #                               Activity Settings                              #
+            # ---------------------------------------------------------------------------- #
     
             session.set_comments(       config.photo_comments, 
                                         media = 'Photo' )
@@ -182,9 +183,9 @@ if args['interact'] == "true":
                                         media = 'Photo'                             )
             
             
-    # ---------------------------------------------------------------------------- #
-    #                              Perform Activities                              #
-    # ---------------------------------------------------------------------------- #
+            # ---------------------------------------------------------------------------- #
+            #                              Perform Activities                              #
+            # ---------------------------------------------------------------------------- #
     
             # Remove outgoing unapproved follow requests from private accounts
             # session.remove_follow_requests(amount=200, sleep_delay=600)

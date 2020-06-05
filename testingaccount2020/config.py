@@ -1,4 +1,6 @@
 
+headless_browser = False
+source="source"
 
 # variables
 similar_accounts = ['pycoders', '_compiler._', 'programmer.me', 'high_programmer']
