@@ -202,7 +202,7 @@ if args['interact'] == "true":
                                             interact=True)
             
             # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
-            session.like_by_tags(   random.sample(like_tag_list, 
+            session.like_by_tags(   random.sample(config.like_tag_list, 
                                         random.randint( config.like_by_tags_amount_of_tags,
                                                         config.like_by_tags_amount_of_tags*2    )), 
                                     amount=random.randint(  config.like_by_tags_amount, 

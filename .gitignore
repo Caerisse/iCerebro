@@ -3,6 +3,8 @@
 **/*pyc
 **.log*
 *.log*
+**.log
+*.log
 **/posts_source
 **/cookie.json
 **/workspace

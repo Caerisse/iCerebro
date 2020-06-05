@@ -21,7 +21,7 @@ IL = instaloader.Instaloader()
 IL.login(insta_username, insta_password)
 
 # Get profile
-print("Getting profile, i tmay take a while")
+print("Getting profile")
 profile = instaloader.Profile.from_username(IL.context, source)
 
 #Get followers
@@ -45,9 +45,13 @@ print("Getting posts, it may take a while")
 post_iterator = instaloader.Profile.from_username(IL.context, source).get_posts()
 online_posts = set(post_iterator)
 
-# Download new posts
-print("Downloading posts: ")
+# Download profile and new posts
 os.chdir(args['account'])
+
+print("Downloading profile pic:")
+IL.download_profilepic(profile)
+
+print("Downloading posts:")
 for post in online_posts-saved_posts:
     try:
         IL.download_post(post, "posts_source")

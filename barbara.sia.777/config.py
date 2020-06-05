@@ -4,7 +4,7 @@
 #                              Session run config                              #
 # ---------------------------------------------------------------------------- #
 
-headless_browser = True
+headless_browser = False
 
 # set_quota_supervisor
 peak_likes_hourly=90
@@ -62,7 +62,7 @@ like_by_tags_amount_of_tags = 10
 like_by_tags_amount = 20
 
 # Posts sources
-# sounrce_link = https://www.instagram.com/accounts/alessiabarone1/
+# sounrce_link = https://www.instagram.com/alessiabarone1/
 source = 'alessiabarone1'
 
 # variables
@@ -153,6 +153,6 @@ photo_comments = [
 
 
 dont_like = ['dick', 'squirt',
-         'kids', 'children', 'child', 'nazi', 'jew', 'judaism', 'muslim', 'islam', 
+         'nazi', 'jew', 'judaism', 'muslim', 'islam', 
          'bangladesh', 'hijab', 'niqab', 'farright', 'rightwing', 'conservative', 'death', 
          'racist', 'pussy', 'porn', 'hentai']
