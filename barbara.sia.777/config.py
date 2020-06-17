@@ -56,10 +56,10 @@ accept_follow_requests_amount = 100
 accept_follow_requests_sleep_delay = 5
 
 # Will actually use a random number between these and its double
-follow_user_followers_amount_of_accounts = 4
-follow_user_followers_amount = 20
-like_by_tags_amount_of_tags = 10
-like_by_tags_amount = 20
+follow_user_followers_amount_of_accounts = 2
+follow_user_followers_amount = 5
+like_by_tags_amount_of_tags = 3
+like_by_tags_amount = 10
 
 # Posts sources
 # sounrce_link = https://www.instagram.com/alessiabarone1/

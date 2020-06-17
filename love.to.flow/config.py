@@ -7,24 +7,24 @@
 headless_browser = False
 
 # set_quota_supervisor
-peak_likes_hourly=30
-peak_likes_daily=300
-peak_comments_hourly=10
-peak_comments_daily=100
-peak_follows_hourly=30
-peak_follows_daily=300
-peak_unfollows_hourly=40
-peak_unfollows_daily=400
-peak_server_calls_hourly=300
-peak_server_calls_daily=2000
+peak_likes_hourly=200
+peak_likes_daily=3000
+peak_comments_hourly=30
+peak_comments_daily=200
+peak_follows_hourly=100
+peak_follows_daily=3000
+peak_unfollows_hourly=50
+peak_unfollows_daily=200
+peak_server_calls_hourly=500
+peak_server_calls_daily=5000
 
 # set_action_delays (seconds)
 # action delay will be chosen at random each time from between these numbers and its double
-like=15
-comment=45
-follow=30
-unfollow=20
-story=15
+like=5
+comment=10
+follow=10
+unfollow=5
+story=5
 
 # set_relationship_bounds
 max_followers=10000
@@ -57,10 +57,10 @@ accept_follow_requests_amount = 100
 accept_follow_requests_sleep_delay = 5
 
 # Will actually use a random number between these and its double
-follow_user_followers_amount_of_accounts = 2
-follow_user_followers_amount = 10
-like_by_tags_amount_of_tags = 8
-like_by_tags_amount = 15
+follow_user_followers_amount_of_accounts = 1
+follow_user_followers_amount = 5
+like_by_tags_amount_of_tags = 2
+like_by_tags_amount = 10
 
 # Posts sources
 # https://www.instagram.com/the.sunshine.yogi/

@@ -1,8 +1,5 @@
 # Imports
 from instapy import InstaPy
-from instapy import smart_run
-from instapy import set_workspace
-#from instapy_cli import client
 from upload import upload_single_image
 import random
 import argparse
@@ -17,6 +14,14 @@ ap.add_argument('--no-pods', required=False, help="do not join pods", dest='no-p
 args = vars(ap.parse_args())
 
 if args['account'].endswith('/'): args['account'] = args['account'][0:-1]
+
+"""
+args = {}
+args['account'] = 'testingaccount2020'
+args['no-pods'] = False
+args['no-interact'] = False
+"""
+
 sys.path.append('./{}'.format(args['account']))
 
 # Login credentials
@@ -48,7 +53,7 @@ session.set_dont_like(config.dont_like)
 # Quota and delay settings
 # TODO: hook to a simple AI
 session.set_quota_supervisor(   enabled=True, 
-                    sleep_after=["likes", "comments_d", "follows", "unfollows", "server_calls_h"], 
+                                sleep_after=["likes", "comments_d", "follows", "unfollows", "server_calls_h"], 
                                 sleepyhead=True, stochastic_flow=True, notify_me=True,
                                 peak_likes_hourly=config.peak_likes_hourly,
                                 peak_likes_daily=config.peak_likes_daily,
@@ -89,8 +94,7 @@ session.set_mandatory_language(enabled=True, character_set=['LATIN'])
 # Not unfollow anyone whi interacted with the account
 session.set_dont_unfollow_active_users(enabled=True, posts=3)
 
-# Some interactions with the page can be simulated via interaction with the API instead of the ui, safer disabled
-session.set_simulation(enabled=False, percentage=0)
+session.set_simulation(enabled=True, percentage=90)
 
 # Skip certains users (In this case will not interact with private accounts 80 percent of the time 
 # and not at all with no profile pics account)
@@ -99,7 +103,7 @@ session.set_skip_users( skip_private=config.skip_private,
                         skip_no_profile_pic=config.skip_no_profile_pic,
                         no_profile_pic_percentage=config.no_profile_pic_percentage,
                         skip_business=config.skip_business,
-    		                        skip_non_business=config.skip_non_business,
+    		            skip_non_business=config.skip_non_business,
                         business_percentage=config.business_percentage,
                         skip_business_categories=config.skip_business_categories,
                         dont_skip_business_categories=config.dont_skip_business_categories  )
@@ -185,6 +189,17 @@ try:
                 os.remove(file_name)
 
         # ---------------------------------------------------------------------------- #
+        #                                   Join Pods                                  #
+        # ---------------------------------------------------------------------------- #
+
+        if not args['no-pods']:
+            # Topics allowed are {'general', 'fashion', 'food', 'travel', 'sports', 'entertainment'}.
+            # TODO: move to config files
+            session.join_pods(topic='fashion', engagement_mode='normal')
+            session.join_pods(topic='travel', engagement_mode='normal')
+
+
+        # ---------------------------------------------------------------------------- #
         #                              Perform Activities                              #
         # ---------------------------------------------------------------------------- #
 
@@ -204,32 +219,7 @@ try:
                                                                     config.follow_user_followers_amount*2   ), 
                                             randomize=True, 
                                             interact=True)
-            # TODO: check function follow_user_followers on instapy source, getting these errors:
-            """
-            INFO [2020-06-07 15:35:45] [love.to.flow]  Failed to get followers count of 'b'higherconscioushabits''  ~empty list
-            INFO [2020-06-07 15:36:35] [love.to.flow]  Failed to get following count of 'b'higherconscioushabits''  ~empty list
-            INFO [2020-06-07 15:36:35] [love.to.flow]  User: 'higherconscioushabits'  |> followers: unknown  |> following: unknown  |> relationship ratio: unknown
-            ERROR [2020-06-07 15:36:35] [love.to.flow]  ~cannot get number of posts for username
-            INFO [2020-06-07 15:36:35] [love.to.flow]  ---> Sorry, couldn't check for number of posts of username
-            """        
-            """
-            Traceback (most recent call last):
-              File "bot.py", line 197, in <module>
-                session.follow_user_followers(  random.sample(config.similar_accounts, 
-              File "/home/caerisse/.local/lib/python3.8/site-packages/instapy/instapy.py", line 3454, in follow_user_followers
-                person_list, simulated_list = get_given_user_followers(
-              File "/home/caerisse/.local/lib/python3.8/site-packages/instapy/unfollow_util.py", line 1013, in get_given_user_followers
-                person_list, simulated_list = get_users_through_dialog_with_graphql(
-              File "/home/caerisse/.local/lib/python3.8/site-packages/instapy/unfollow_util.py", line 767, in get_users_through_dialog_with_graphql
-                browser.get("view-source:{}".format(url))
-              File "/home/caerisse/.local/lib/python3.8/site-packages/selenium/webdriver/remote/webdriver.py", line 333, in get
-                self.execute(Command.GET, {'url': url})
-              File "/home/caerisse/.local/lib/python3.8/site-packages/selenium/webdriver/remote/webdriver.py", line 321, in execute
-                self.error_handler.check_response(response)
-              File "/home/caerisse/.local/lib/python3.8/site-packages/selenium/webdriver/remote/errorhandler.py", line 242, in check_response
-                raise exception_class(message, screen, stacktrace)
-            selenium.common.exceptions.TimeoutException: Message: Timeout loading page after 300000ms
-            """
+                                            
             # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
             session.like_by_tags(   random.sample(config.like_tag_list, 
                                         random.randint( config.like_by_tags_amount_of_tags,
@@ -241,20 +231,11 @@ try:
 
 
             # Unfollow some users who dont follow back after 3-5 days
-            session.unfollow_users( amount=60, instapy_followed_enabled=True, 
+            session.unfollow_users( amount=20, instapy_followed_enabled=True, 
                                     instapy_followed_param="nonfollowers", style="RANDOM", 
                                     unfollow_after=random.randint(72, 120)*60*60, sleep_delay=random.randint(403,501))
     
-        # ---------------------------------------------------------------------------- #
-        #                                   Join Pods                                  #
-        # ---------------------------------------------------------------------------- #
-
-        if not args['no-pods']:
-            # Topics allowed are {'general', 'fashion', 'food', 'travel', 'sports', 'entertainment'}.
-            # TODO: move to config files
-            session.join_pods(topic='fashion', engagement_mode='normal')
-            session.join_pods(topic='travel', engagement_mode='normal')
-
+        
 except KeyboardInterrupt:
     pass
 except ConnectionRefusedError:
