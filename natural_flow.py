@@ -15,6 +15,9 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
 
 
+from selenium.webdriver.common.action_chains import ActionChains
+
+
 class MyInstaPy(InstaPy):
 
     def nf_like_by_tags(
@@ -30,13 +33,6 @@ class MyInstaPy(InstaPy):
         """Likes (default) 50 images per given tag"""
         if self.aborting:
             return self
-
-        liked_img = 0
-        already_liked = 0
-        inap_img = 0
-        commented = 0
-        followed = 0
-        not_valid_users = 0
 
         # if smart hashtag is enabled
         if use_smart_hashtags is True and self.smart_hashtags != []:
@@ -66,34 +62,22 @@ class MyInstaPy(InstaPy):
             if self.quotient_breach:
                 break
 
+
+            state = {
+                'liked_img': 0,
+                'already_liked': 0,
+                'inap_img': 0,
+                'commented': 0,
+                'followed': 0,
+                'not_valid_users': 0,
+            }
+
             self.logger.info("Tag [{}/{}]".format(index + 1, len(tags)))
             self.logger.info("--> {}".format(tag.encode("utf-8")))
 
             tag = tag[1:] if tag[:1] == "#" else tag
 
-            # clicking explore
-            self.browser.find_element_by_xpath(
-                "/html/body/div[1]/section/nav[2]/div/div/div[2]/div/div/div[2]"
-            ).click()
-
-            sleep(1)
-
-            # tiping tag
-            search_bar = self.browser.find_element_by_xpath(
-                "/html/body/div[1]/section/nav[1]/div/header/div/h1/div/div/div/div[1]/label/input"
-            )
-            search_bar.click()
-            search_bar.send_keys(tag)
-
-            sleep(2)
-
-            # click tag
-            tag_option = self.browser.find_element_by_xpath(
-                '//a[@href="/explore/tags/{}/"]'.format(tag)
-            )
-            self.browser.execute_script("arguments[0].click();", tag_option)
-
-            sleep(1)
+            self.nf_go_to_tag_page(self.browser, tag)
 
             # get amount of post with this hashtag
             try:
@@ -121,23 +105,12 @@ class MyInstaPy(InstaPy):
                     )
                     possible_posts = None
 
-            if skip_top_posts:
-                amount = amount + 9
-
-            
-            # get top posts
-            main_elem = self.browser.find_element_by_xpath(
-                            read_xpath("get_links_for_tag", "top_elements")
-                        )
-            top_posts = main_elem.find_elements_by_tag_name("a")
-
 
             self.logger.info(
-                "desired amount: {}  |  top posts [{}]: {}  |  possible posts: "
+                "desired amount: {}  |  top posts [{}] |  possible posts: "
                 "{}".format(
                     amount,
                     "enabled" if not skip_top_posts else "disabled",
-                    len(top_posts),
                     possible_posts,
                 )
             )
@@ -150,122 +123,111 @@ class MyInstaPy(InstaPy):
 
             sleep(1)
             
-            filtered_links = 0
             try_again = 0
             sc_rolled = 0
-            nap = 1.5
-            links = []
+            scroll_nap = 1.5
+            already_interacted_links = []
             try:
-                while liked_img in range(0, amount-1):
+                while state['liked_img'] in range(0, amount-1):
                     if sc_rolled > 100:
                         try_again += 1
                         if try_again > 2: # you can try again as much as you want by changing this number
                             self.logger.info(
                                     "'{}' tag POSSIBLY has less images than "
-                                    "desired:{} found:{}...".format(tag, amount, len(links))
+                                    "desired:{} found:{}...".format(tag, amount, len(already_interacted_links))
                                 )
                             break
-                        self.logger.info("Scrolled too much! ~ sleeping a bit :>")
+                        self.logger.info("Scrolled too much! ~ sleeping 10 minutes")
                         sleep(600)
                         sc_rolled = 0
 
-                    main_elem = self.browser.find_element_by_xpath(
-                            read_xpath("get_links_for_tag", "main_elem")
-                        )
-                    main_posts = main_elem.find_elements_by_tag_name("a")
+                    # Failsafe in case we dont end in the tag page, if we are there nothing is done
+                    #web_address_navigator(self.browser, "https://www.instagram.com/explore/tags/{}/".format(tag))
 
-                    if sc_rolled == 0 and not skip_top_posts:
-                        # get top posts
-                        main_elem = self.browser.find_element_by_xpath(
-                            read_xpath("get_links_for_tag", "top_elements")
-                        )
-                        top_posts = main_elem.find_elements_by_tag_name("a")
-                        main_posts = top_posts + main_posts
+                    main_elem = self.browser.find_element_by_tag_name("main")
+                    posts = self.nf_get_all_posts_on_element(self.browser, main_elem)
 
                     # Interact with links instead of just storing them
-                    for post in main_posts:
+                    for post in posts:
                         link = post.get_attribute("href")
-                        if link not in links:
+                        if link not in already_interacted_links:
+
+                            self.logger.info("about to scroll to post")
+                            sleep(2)
+                            self.nf_scroll_into_view(self.browser, post)
+                            self.logger.info("about to click to post")
                             sleep(1)
-                            self.browser.execute_script("arguments[0].click();", post)
-                            sleep(5)
-                            success, msg = self.nf_interact_with_post(
-                                            post, 
-                                            link, 
-                                            liked_img,
-                                            amount,
-                                            already_liked,
-                                            inap_img,
-                                            commented,
-                                            followed,
-                                            not_valid_users,
-                                            interact,
-                                        )
-                            sleep(1)
+                            self.nf_click_center_of_element(self.browser, post)
+                            #self.browser.execute_script("arguments[0].click();", post)
                             
+                            self.logger.info("about to like post")
+                            sleep(3)
+                            success, msg, state = self.nf_interact_with_post( 
+                                                            link, 
+                                                            amount,
+                                                            state,
+                                                            interact,
+                                                        )
+
+                            self.logger.info("Returned from liking, should still be in post page")
+                            sleep(1)
                             back = self.browser.find_element_by_xpath(
                                         '/html/body/div[1]/section/nav[1]/div/header/div/div[1]/a'
                             )
-                            back.click()
-                            
-                            # Failsafe in case we dont end in the tag page, if we are there nothing is done
-                            web_address_navigator(self.browser, "https://www.instagram.com/explore/tags/{}/".format(tag))
+                            #self.nf_click_center_of_element(self.browser, back)
+                            self.browser.execute_script("arguments[0].click();", back)
+                            self.logger.info("Clicked back button")
 
                             if success:
-                                links.append(link)
+                                already_interacted_links.append(link)
                                 break
                             if msg == "block on likes":
                                 # TODO deal with block on likes
                                 break
-
-                    filtered_links = len(links)
-
-                    if filtered_links % 9 == 0:
-                        self.browser.execute_script(
-                            "window.scrollTo(0, document.body.scrollHeight);"
-                        )
-                        update_activity(browser, state=None)
-                        sc_rolled += 1
-
-                    sleep(nap)  
+                    else:
+                        # For loop ended means all posts in screen has been interacted with
+                        # will scroll the screen a bit and reload
+                        for i in range(3):
+                            self.browser.execute_script(
+                                "window.scrollTo(0, document.body.scrollHeight);"
+                            )
+                            update_activity(self.browser, state=None)
+                            sc_rolled += 1
+                            sleep(scroll_nap)
 
             except Exception:
                 raise
 
             sleep(4)
 
+            self.logger.info("Tag [{}/{}]".format(index + 1, len(tags)))
+            self.logger.info("--> {} ended".format(tag.encode("utf-8")))
+            self.logger.info("Liked: {}".format(state['liked_img']))
+            self.logger.info("Already Liked: {}".format(state['already_liked']))
+            self.logger.info("Commented: {}".format(state['commented']))
+            self.logger.info("Followed: {}".format(state['followed']))
+            self.logger.info("Inappropriate: {}".format(state['inap_img']))
+            self.logger.info("Not valid users: {}\n".format(state['not_valid_users']))
 
-        self.logger.info("Liked: {}".format(liked_img))
-        self.logger.info("Already Liked: {}".format(already_liked))
-        self.logger.info("Commented: {}".format(commented))
-        self.logger.info("Followed: {}".format(followed))
-        self.logger.info("Inappropriate: {}".format(inap_img))
-        self.logger.info("Not valid users: {}\n".format(not_valid_users))
-
-        self.liked_img += liked_img
-        self.already_liked += already_liked
-        self.commented += commented
-        self.followed += followed
-        self.inap_img += inap_img
-        self.not_valid_users += not_valid_users
+            self.liked_img += state['liked_img']
+            self.already_liked += state['already_liked']
+            self.commented += state['commented']
+            self.followed += state['followed']
+            self.inap_img += state['inap_img']
+            self.not_valid_users += state['not_valid_users']
 
         return self
 
 
     def nf_interact_with_post(   
                         self,
-                        post, 
                         link, 
-                        liked_img,
                         amount,
-                        already_liked,
-                        inap_img,
-                        commented,
-                        followed,
-                        not_valid_users,
+                        state,
                         interact,
                     ):
                 try:
+                        """
                     inappropriate, user_name, is_video, reason, scope = check_link(
                         self.browser,
                         link,
@@ -293,20 +255,20 @@ class MyInstaPy(InstaPy):
                             return True, "not_valid_users"
                         else:
                             web_address_navigator(self.browser, link)
-
+                        """
                         # try to like
                         like_state, msg = like_image(
                             self.browser,
-                            user_name,
+                            "user_name",
                             self.blacklist,
                             self.logger,
                             self.logfolder,
-                            liked_img,
+                            state['liked_img'],
                         )
 
                         if like_state is True:
-                            liked_img += 1
-                            self.logger.info("Like# [{}/{}]".format(liked_img, amount))
+                            state['liked_img'] += 1
+                            self.logger.info("Like# [{}/{}]".format(state['liked_img'], amount))
                             self.logger.info(link)
                             # reset jump counter after a successful like
                             self.jumps["consequent"]["likes"] = 0
@@ -396,26 +358,93 @@ class MyInstaPy(InstaPy):
                                     )
                             """
                         elif msg == "already liked":
-                            already_liked += 1
+                            state['already_liked'] += 1
+                            return True, msg, state
 
                         elif msg == "block on likes":
-                            return False, msg
+                            return False, msg, state
 
                         elif msg == "jumped":
                             # will break the loop after certain consecutive
                             # jumps
                             self.jumps["consequent"]["likes"] += 1
 
-                        return True, "success"
+                        return True, "success", state
+                        """
                     else:
                         self.logger.info(
                             "--> Image not liked: {}".format(reason.encode("utf-8"))
                         )
                         inap_img += 1
                         return True, "inap_img"
-
+                        """
                     
 
                 except NoSuchElementException as err:
                     self.logger.error("Invalid Page: {}".format(err))
-                    return False, "Invalid Page"
+                    return False, "Invalid Page", state
+
+
+    def nf_go_to_tag_page(self, browser, tag):
+        sleep(1)
+        # clicking explore
+        explore = browser.find_element_by_xpath(
+                "/html/body/div[1]/section/nav[2]/div/div/div[2]/div/div/div[2]"
+        )
+        explore.click()
+        sleep(1)
+        # tiping tag
+        search_bar = browser.find_element_by_xpath(
+                "/html/body/div[1]/section/nav[1]/div/header/div/h1/div/div/div/div[1]/label/input"
+        )
+        search_bar.click()
+        search_bar.send_keys("#" + tag)
+        sleep(2)
+        # click tag
+        tag_option = browser.find_element_by_xpath(
+                '//a[@href="/explore/tags/{}/"]'.format(tag)
+        )
+        #browser.execute_script("arguments[0].click();", tag_option)
+        self.nf_click_center_of_element(browser, tag_option)
+        sleep(1)
+
+
+    def nf_scroll_into_view(self, browser, element):
+        desired_y = (element.size['height'] / 2) + element.location['y']
+        window_h = browser.execute_script('return window.innerHeight')
+        window_y = browser.execute_script('return window.pageYOffset')
+        current_y = (window_h / 2) + window_y
+        scroll_y_by = desired_y - current_y
+        #TODO: add random offset and smooth scrolling to appear more natural
+        sleep(1)
+        browser.execute_script("window.scrollBy(0, arguments[0]);", scroll_y_by)
+        sleep(1)
+
+    def nf_click_center_of_element(self, browser, element):
+        sleep(1)
+        (
+            ActionChains(browser)
+            .move_to_element(element)
+            .move_by_offset(
+                element.size['height']/2, 
+                element.size['width']/2
+            )
+            .click()
+            .perform()
+        )
+        sleep(1)
+
+    def nf_get_all_posts_on_element(self, browser, element):
+        return element.find_elements_by_xpath('//a[starts-with(@href, "/p/")]')
+
+
+
+
+
+
+
+
+
+
+
+
