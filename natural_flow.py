@@ -1,19 +1,20 @@
 
 
 import random
+import re
+from re import findall
 
 from instapy import InstaPy
 from instapy.constants import MEDIA_PHOTO, MEDIA_CAROUSEL, MEDIA_ALL_TYPES
 from instapy.util import click_element, click_visibly, update_activity, format_number, web_address_navigator
 from instapy.comment_util import get_comments_on_post
-from instapy.like_util import check_link, like_image
+from instapy.like_util import like_image
 from instapy.xpath import read_xpath
 from instapy.time_util import sleep
 
 from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
-
 
 from selenium.webdriver.common.action_chains import ActionChains
 
@@ -128,7 +129,7 @@ class MyInstaPy(InstaPy):
             scroll_nap = 1.5
             already_interacted_links = []
             try:
-                while state['liked_img'] in range(0, amount-1):
+                while state['liked_img'] in range(0, amount):
                     if sc_rolled > 100:
                         try_again += 1
                         if try_again > 2: # you can try again as much as you want by changing this number
@@ -153,15 +154,12 @@ class MyInstaPy(InstaPy):
                         if link not in already_interacted_links:
 
                             self.logger.info("about to scroll to post")
-                            sleep(2)
+                            sleep(1)
                             self.nf_scroll_into_view(self.browser, post)
                             self.logger.info("about to click to post")
                             sleep(1)
                             self.nf_click_center_of_element(self.browser, post)
-                            #self.browser.execute_script("arguments[0].click();", post)
-                            
-                            self.logger.info("about to like post")
-                            sleep(3)
+
                             success, msg, state = self.nf_interact_with_post( 
                                                             link, 
                                                             amount,
@@ -170,7 +168,7 @@ class MyInstaPy(InstaPy):
                                                         )
 
                             self.logger.info("Returned from liking, should still be in post page")
-                            sleep(1)
+                            
                             back = self.browser.find_element_by_xpath(
                                         '/html/body/div[1]/section/nav[1]/div/header/div/div[1]/a'
                             )
@@ -178,8 +176,9 @@ class MyInstaPy(InstaPy):
                             self.browser.execute_script("arguments[0].click();", back)
                             self.logger.info("Clicked back button")
 
+                            already_interacted_links.append(link)
+
                             if success:
-                                already_interacted_links.append(link)
                                 break
                             if msg == "block on likes":
                                 # TODO deal with block on likes
@@ -227,20 +226,11 @@ class MyInstaPy(InstaPy):
                         interact,
                     ):
                 try:
-                        """
-                    inappropriate, user_name, is_video, reason, scope = check_link(
-                        self.browser,
+                    self.logger.info("about to check post")
+                    inappropriate, user_name, is_video, reason, scope = self.nf_check_post(
                         link,
-                        self.dont_like,
-                        self.mandatory_words,
-                        self.mandatory_language,
-                        self.is_mandatory_character,
-                        self.mandatory_character,
-                        self.check_character_set,
-                        self.ignore_if_contains,
-                        self.logger,
                     )
-
+                    self.logger.info("about to verify post")
                     if not inappropriate and self.delimit_liking:
                         self.liking_approved = verify_liking(
                             self.browser, self.max_likes, self.min_likes, self.logger
@@ -248,6 +238,9 @@ class MyInstaPy(InstaPy):
 
                     if not inappropriate and self.liking_approved:
                         # validate user
+                        # TODO: remake to comply with natural flow
+                        """
+                        self.logger.info("about to validate post")
                         validation, details = self.validate_user_call(user_name)
                         if validation is not True:
                             self.logger.info(details)
@@ -257,6 +250,7 @@ class MyInstaPy(InstaPy):
                             web_address_navigator(self.browser, link)
                         """
                         # try to like
+                        self.logger.info("about to like post")
                         like_state, msg = like_image(
                             self.browser,
                             "user_name",
@@ -276,6 +270,7 @@ class MyInstaPy(InstaPy):
                             checked_img = True
                             temp_comments = []
 
+                            # TODO: remake to comply with natural flow
                             """
                             commenting = random.randint(0, 100) <= self.comment_percentage
                             following = random.randint(0, 100) <= self.follow_percentage
@@ -437,14 +432,147 @@ class MyInstaPy(InstaPy):
     def nf_get_all_posts_on_element(self, browser, element):
         return element.find_elements_by_xpath('//a[starts-with(@href, "/p/")]')
 
+    def nf_check_post(self, post_link):
+        # Check URL of the webpage, if it already is post's page, then do not
+        # navigate to it again, should never do anything
+        web_address_navigator(self.browser, post_link)
+        sleep(2)
+        
+        username = self.browser.find_element_by_xpath(
+            '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[1]/a'
+        )
+
+        username_text = username.text
+
+        follow_button = self.browser.find_element_by_xpath(
+            '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[2]/button'
+        )
+
+        following = follow_button.text == "Following"
+
+        locations = self.browser.find_elements_by_xpath(
+            '/html/body/div[1]/section/main/div/div/article/header//a[contains(@href,"locations")]'
+        )
+
+        location_text = locations[0].text if locations != [] else None
+        location_link = locations[0].get_attribute('href') if locations != [] else None
+        images = self.browser.find_elements_by_xpath(
+            '/html/body/div[1]/section/main/div/div/article//img[@class="FFVAD"]'
+        )
+        video_previews = self.browser.find_elements_by_xpath(
+            '/html/body/div[1]/section/main/div/div/article//img[@class="_8jZFn"]'
+        )
+        videos = self.browser.find_elements_by_xpath(
+            '/html/body/div[1]/section/main/div/div/article//video[@class="tWeCl"]'
+        )
+        
+        """
+        if (len(images) + len(videos)) == 1:
+            # single image or video
+        elif len(images) == 2:
+            # carrousel
+        """
+
+        is_video = len(videos)>=1
+
+        image_descriptions = []
+        image_links = []
+        for image in images:
+            image_description = image.get_attribute('alt')
+            if image_description is not None and 'Image may contain:' in image_description:
+                image_description = image_description[image_description.index('Image may contain:') + 19 :]
+            else:
+                image_description = None
+            image_descriptions.append(image_description)
+            image_links.append(image.get_attribute('src'))
 
 
+        more_button = self.browser.find_elements_by_xpath("//button[text()='more']")
+        if more_button != []:
+            self.nf_scroll_into_view(self.browser, more_button[0])
+            more_button[0].click()
+ 
+        caption = self.browser.find_element_by_xpath(
+            "/html/body/div[1]/section/main/div/div/article//div[2]/div[1]//div/span/span"
+        ).text
 
+        comments_button = self.browser.find_elements_by_xpath(
+            '//article//div[2]/div[1]//a[contains(@href,"comments")]'
+        )
 
+        self.logger.info("Image from: {}".format(username_text.encode("utf-8")))
+        self.logger.info("Link: {}".format(post_link.encode("utf-8")))
+        self.logger.info("Caption: {}".format(caption.encode("utf-8")))
+        for image_description in image_descriptions:
+            if image_description:
+                self.logger.info("Description: {}".format(image_description.encode("utf-8")))
+        
 
+        # Check if mandatory character set, before adding the location to the text
+        caption = "" if caption is None else caption
+        if self.mandatory_language:
+            if not self.check_character_set(caption):
+                return (
+                    True,
+                    username_text,
+                    is_video,
+                    "Mandatory language not fulfilled",
+                    "Not mandatory " "language",
+                )
 
+        # Append location to image_text so we can search through both in one go
+        if location_text:
+            self.logger.info("Location: {}".format(location_text.encode("utf-8")))
+            caption = caption + "\n" + location_text
 
+        if self.mandatory_words:
+            if not any((word in image_text for word in self.mandatory_words)):
+                return (
+                    True,
+                    username_text,
+                    is_video,
+                    "Mandatory words not fulfilled",
+                    "Not mandatory likes",
+                )
 
+        image_text_lower = [x.lower() for x in caption]
+        ignore_if_contains_lower = [x.lower() for x in self.ignore_if_contains]
+        if any((word in image_text_lower for word in ignore_if_contains_lower)):
+            return False, username_text, is_video, "None", "Pass"
 
+        dont_like_regex = []
 
+        for dont_likes in self.dont_like:
+            if dont_likes.startswith("#"):
+                dont_like_regex.append(dont_likes + r"([^\d\w]|$)")
+            elif dont_likes.startswith("["):
+                dont_like_regex.append("#" + dont_likes[1:] + r"[\d\w]+([^\d\w]|$)")
+            elif dont_likes.startswith("]"):
+                dont_like_regex.append(r"#[\d\w]+" + dont_likes[1:] + r"([^\d\w]|$)")
+            else:
+                dont_like_regex.append(r"#[\d\w]*" + dont_likes + r"[\d\w]*([^\d\w]|$)")
+
+        for dont_likes_regex in dont_like_regex:
+            quash = re.search(dont_likes_regex, caption, re.IGNORECASE)
+            if quash:
+                quashed = (
+                    (((quash.group(0)).split("#")[1]).split(" ")[0])
+                    .split("\n")[0]
+                    .encode("utf-8")
+                )  # dismiss possible space and newlines
+                iffy = (
+                    (re.split(r"\W+", dont_likes_regex))[3]
+                    if dont_likes_regex.endswith("*([^\\d\\w]|$)")
+                    else (re.split(r"\W+", dont_likes_regex))[1]  # 'word' without format
+                    if dont_likes_regex.endswith("+([^\\d\\w]|$)")
+                    else (re.split(r"\W+", dont_likes_regex))[3]  # '[word'
+                    if dont_likes_regex.startswith("#[\\d\\w]+")
+                    else (re.split(r"\W+", dont_likes_regex))[1]  # ']word'
+                )  # '#word'
+                inapp_unit = 'Inappropriate! ~ contains "{}"'.format(
+                    quashed if iffy == quashed else '" in "'.join([str(iffy), str(quashed)])
+                )
+                return True, username_text, is_video, inapp_unit, "Undesired word"
+
+        return False, username_text, is_video, "None", "Success"
 
