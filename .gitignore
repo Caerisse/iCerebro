@@ -1,12 +1,7 @@
 **/credentials.py 
 **/___pycache__
 **/*pyc
-**.log*
-*.log*
-**.log
-*.log
+**.log**
 **/posts_source
 **/cookie.json
 **/workspace
-geckodriver.log
-**/geckodriver
