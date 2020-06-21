@@ -1,5 +1,5 @@
 # Imports
-from instapy import InstaPy
+from natural_flow import MyInstaPy
 from upload import upload_single_image
 import random
 import argparse
@@ -36,7 +36,7 @@ import config
 
 # get an InstaPy session and login
 # set headless_browser=True to run InstaPy in the background
-session = InstaPy(  username=insta_username,
+session = MyInstaPy(  username=insta_username,
                     password=insta_password,
                     want_check_browser=False,
                     headless_browser=config.headless_browser,
@@ -167,14 +167,16 @@ try:
                     post = []
                     delete = []
                     text = ""
-                    base_name = files[0][0:files[0].index('UTC')+3]
+                    base_name = file_name[0:file_name.index('UTC')+3]
                     text_is_bad = False
                 if file_name.startswith(base_name):
                     delete.append(path + file_name)
                     if file_name.endswith('.txt') and "location" not in file_name:
                         text = open(path + file_name, "r").read().strip()
                         if "@" in text:
-                            print("check post {} text, possibly has a tag \n posting next one".format(base_name))
+                            session.logger.info(
+                                "check post {} text, possibly has a tag \n posting next one".format(base_name)
+                            )
                             text_is_bad = True
                     elif file_name.endswith('.jpg') or file_name.endswith('.mp4'):
                         post.append(file_name)
@@ -221,7 +223,7 @@ try:
                                             interact=True)
                                             
             # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
-            session.like_by_tags(   random.sample(config.like_tag_list, 
+            session.nf_like_by_tags(   random.sample(config.like_tag_list, 
                                         random.randint( config.like_by_tags_amount_of_tags,
                                                         config.like_by_tags_amount_of_tags*2    )), 
                                     amount=random.randint(  config.like_by_tags_amount, 

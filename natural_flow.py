@@ -384,27 +384,31 @@ class MyInstaPy(InstaPy):
                     return False, "Invalid Page", state
 
     def nf_go_to_tag_page(self, tag):
-        sleep(1)
-        # clicking explore
-        explore = self.browser.find_element_by_xpath(
+        try:
+            sleep(1)
+            # clicking explore
+            explore = self.browser.find_element_by_xpath(
                 "/html/body/div[1]/section/nav[2]/div/div/div[2]/div/div/div[2]"
-        )
-        explore.click()
-        sleep(1)
-        # tiping tag
-        search_bar = self.browser.find_element_by_xpath(
+            )
+            explore.click()
+            sleep(1)
+            # tiping tag
+            search_bar = self.browser.find_element_by_xpath(
                 "/html/body/div[1]/section/nav[1]/div/header/div/h1/div/div/div/div[1]/label/input"
-        )
-        search_bar.click()
-        search_bar.send_keys("#" + tag)
-        sleep(2)
-        # click tag
-        tag_option = self.browser.find_element_by_xpath(
+            )
+            search_bar.click()
+            search_bar.send_keys("#" + tag)
+            sleep(2)
+            # click tag
+            tag_option = self.browser.find_element_by_xpath(
                 '//a[@href="/explore/tags/{}/"]'.format(tag)
-        )
-        #self.browser.execute_script("arguments[0].click();", tag_option)
-        self.nf_click_center_of_element(tag_option)
-        sleep(1)
+            )
+            #self.browser.execute_script("arguments[0].click();", tag_option)
+            self.nf_click_center_of_element(tag_option)
+            sleep(1)
+        except NoSuchElementException:
+            self.logger.warning("Failed to go to tag oage naturally, navigating there")
+            web_address_navigator(self.browser, "https://www.instagram.com/explore/tags/{}/".format(tag))
 
     def nf_scroll_into_view(self, element):
         desired_y = (element.size['height'] / 2) + element.location['y']
@@ -644,6 +648,7 @@ class MyInstaPy(InstaPy):
             self.logger.info("about to go to user page") 
             sleep(1)
             username_button = self.browser.find_element_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[1]/a'
                 '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[1]/a'
             )
             self.nf_scroll_into_view(username_button)
@@ -886,6 +891,10 @@ class MyInstaPy(InstaPy):
             # if everything is ok
             return True, "Valid user"
 
+        except NoSuchElementException:
+            return False, "Unable to locate element"
+        except:
+            return False, "Unknown error"
         finally:
             self.nf_find_and_press_back(post_link)
 

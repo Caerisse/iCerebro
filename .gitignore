@@ -8,3 +8,5 @@
 **/posts_source
 **/cookie.json
 **/workspace
+geckodriver.log
+**/geckodriver
