@@ -10,7 +10,7 @@ from instapy.constants import MEDIA_PHOTO, MEDIA_CAROUSEL, MEDIA_ALL_TYPES
 from instapy.util import click_element, click_visibly, update_activity, format_number
 from instapy.util import web_address_navigator, get_relationship_counts, getUserData
 from instapy.util import truncate_float, default_profile_pic_instagram
-from instapy.comment_util import get_comments_on_post
+from instapy.comment_util import verify_commenting, comment_image
 from instapy.like_util import like_image, verify_liking
 from instapy.xpath import read_xpath
 from instapy.time_util import sleep
@@ -21,8 +21,27 @@ from selenium.common.exceptions import StaleElementReferenceException
 
 from selenium.webdriver.common.action_chains import ActionChains
 
+from image_analisis import ImageAnalisis
+
 
 class MyInstaPy(InstaPy):
+
+    def __init__(
+        self,
+        use_image_analisis = False,
+        classification_model_name: str = 'resnext101_32x8d', 
+        detection_model_name: str = 'fasterrcnn_resnet50_fpn',
+        *args,
+        **kwargs,
+    ):
+        super(self.__class__, self).__init__(*args, **kwargs)
+
+        self.use_image_analisis = use_image_analisis
+
+        if use_image_analisis:
+            self.ImgAn = ImageAnalisis(classification_model_name, detection_model_name)
+        else:
+            self.ImgAn = None
 
     def nf_like_by_tags(
         self,
@@ -31,7 +50,6 @@ class MyInstaPy(InstaPy):
         skip_top_posts: bool = True,
         use_smart_hashtags: bool = False,
         use_smart_location_hashtags: bool = False,
-        interact: bool = False,
         media: str = None,
     ):
         """Likes (default) 50 images per given tag"""
@@ -163,18 +181,10 @@ class MyInstaPy(InstaPy):
                             sleep(1)
                             self.nf_click_center_of_element(post)
 
-                            #TODO: check error :
-                            """
-                            File "/home/caerisse/Development/InstaPy/bots/natural_flow.py", line 163, in nf_like_by_tags
-                            success, msg, state = self.nf_interact_with_post( 
-                            TypeError: cannot unpack non-iterable NoneType object
-                            """
-
                             success, msg, state = self.nf_interact_with_post( 
                                                             link, 
                                                             amount,
                                                             state,
-                                                            interact,
                                                         )
 
                             self.logger.info("Returned from liking, should still be in post page")
@@ -222,22 +232,20 @@ class MyInstaPy(InstaPy):
 
         return self
 
-
     def nf_interact_with_post(   
                         self,
                         link, 
                         amount,
                         state,
-                        interact,
-                    ):
+                        user_validated=False,
+    ):
                 try:
                     self.logger.info("about to check post")
                     sleep(1)
-                    inappropriate, user_name, is_video, reason, scope = self.nf_check_post(link)
+                    inappropriate, user_name, is_video, image_links, reason, scope = self.nf_check_post(link)
                     self.logger.info("about to verify post")
                     sleep(1)
                     if not inappropriate and self.delimit_liking:
-                        #self.liking_approved = True
                         self.liking_approved = verify_liking(
                             self.browser, self.max_likes, self.min_likes, self.logger
                         )
@@ -246,8 +254,14 @@ class MyInstaPy(InstaPy):
                         # validate user
                         self.logger.info("about to validate user")
                         sleep(1)
-                        validation, details = self.nf_validate_user_call(user_name, link)
+                        if user_validated:
+                            validation = True
+                            details = "User already validated"
+                        else:
+                            validation, details = self.nf_validate_user_call(user_name, link)
+
                         self.logger.info("Validation succes? {}, details: {}".format(validation, details))
+
                         if validation is not True:
                             state["not_valid_users"] += 1
                             return True, "not_valid_users", state
@@ -273,23 +287,22 @@ class MyInstaPy(InstaPy):
 
                             checked_img = True
                             temp_comments = []
-
-                            # TODO: remake to comply with natural flow
-                            """
+                            
                             commenting = random.randint(0, 100) <= self.comment_percentage
                             following = random.randint(0, 100) <= self.follow_percentage
+                            interact = random.randint(0, 100) <= self.user_interact_percentage
 
-                            if self.use_clarifai and (following or commenting):
+                            if self.use_image_analisis and (following or commenting):
                                 try:
                                     (
                                         checked_img,
                                         temp_comments,
-                                        clarifai_tags,
-                                    ) = self.query_clarifai()
-
+                                        image_analisis_tags,
+                                    ) = self.ImgAn.image_analisis(image_links)
+                                    # TODO: image_analisis
                                 except Exception as err:
                                     self.logger.error(
-                                        "Image check error: {}".format(err)
+                                        "Image analisis error: {}".format(err)
                                     )
 
                             # comments
@@ -299,12 +312,10 @@ class MyInstaPy(InstaPy):
                                 and checked_img
                                 and commenting
                             ):
-                                comments = self.comments + (self.video_comments if is_video else self.photo_comments)
-                                success = process_comments(comments, temp_comments, self.delimit_commenting,
-                                                           self.max_comments,
-                                                           self.min_comments, self.comments_mandatory_words,
-                                                           self.username, self.blacklist,
-                                                           self.browser, self.logger, self.logfolder)
+                                comments = (self.comments +
+                                    (self.video_comments if is_video else self.photo_comments))
+
+                                success = self.process_comments(user_name, comments, temp_comments)
 
                                 if success:
                                     commented += 1
@@ -323,6 +334,10 @@ class MyInstaPy(InstaPy):
                                 )
                             ):
 
+                                #self.nf_go_from_post_to_profile(user_name, link)
+                                self.logger.info("about to follow user")
+                                sleep(5)
+
                                 follow_state, msg = follow_user(
                                     self.browser,
                                     "post",
@@ -335,12 +350,18 @@ class MyInstaPy(InstaPy):
                                 )
                                 if follow_state is True:
                                     followed += 1
+
+                                self.logger.info("user followed")
+                                sleep(5)
+
+
                             else:
                                 self.logger.info("--> Not following")
                                 sleep(1)
 
-                            # interactions (if any)
-                            if interact:
+                            
+                            # interactions (only of user not previously validated to impede recursion)
+                            if interact and not user_validated:
                                 self.logger.info(
                                     "--> User gonna be interacted: '{}'".format(
                                         user_name
@@ -348,14 +369,11 @@ class MyInstaPy(InstaPy):
                                 )
 
                                 # disable revalidating user in like_by_users
-                                with self.feature_in_feature("like_by_users", False):
-                                    self.like_by_users(
-                                        user_name,
-                                        self.user_interact_amount,
-                                        self.user_interact_random,
-                                        self.user_interact_media,
-                                    )
-                            """
+                                self.nf_like_by_users(
+                                    [user_name],
+                                    True,
+                                )
+                            
                         elif msg == "already liked":
                             state['already_liked'] += 1
                             return True, msg, state
@@ -407,8 +425,42 @@ class MyInstaPy(InstaPy):
             self.nf_click_center_of_element(tag_option)
             sleep(1)
         except NoSuchElementException:
-            self.logger.warning("Failed to go to tag oage naturally, navigating there")
-            web_address_navigator(self.browser, "https://www.instagram.com/explore/tags/{}/".format(tag))
+            self.logger.warning("Failed to go to tag page naturally, navigating there")
+        #web_address_navigator(
+        #    self.browser, "https://www.instagram.com/explore/tags/{}/".format(tag)
+        #)
+
+    def nf_go_to_user_page(self, username):
+        try:
+            sleep(1)
+            # clicking explore
+            explore = self.browser.find_element_by_xpath(
+                "/html/body/div[1]/section/nav[2]/div/div/div[2]/div/div/div[2]"
+            )
+            explore.click()
+
+            sleep(1)
+            # tiping tag
+            search_bar = self.browser.find_element_by_xpath(
+                "/html/body/div[1]/section/nav[1]/div/header/div/h1/div/div/div/div[1]/label/input"
+            )
+            search_bar.click()
+            search_bar.send_keys(username)
+
+            sleep(2)
+            # click tag
+            user_option = self.browser.find_element_by_xpath(
+                '//a[@href="/{}/"]'.format(username)
+            )
+
+            self.nf_click_center_of_element(user_option)
+
+            sleep(1)
+        except NoSuchElementException:
+            self.logger.warning("Failed to go to user page naturally, navigating there")
+        #web_address_navigator(
+        #    self.browser, "https://www.instagram.com/{}/".format(username)
+        #)
 
     def nf_scroll_into_view(self, element):
         desired_y = (element.size['height'] / 2) + element.location['y']
@@ -427,8 +479,8 @@ class MyInstaPy(InstaPy):
             ActionChains(self.browser)
             .move_to_element(element)
             .move_by_offset(
-                element.size['width']/2,
-                element.size['height']/2, 
+                element.size['width']//2,
+                element.size['height']//2, 
             )
             .click()
             .perform()
@@ -445,7 +497,7 @@ class MyInstaPy(InstaPy):
         sleep(2)
         
         username = self.browser.find_element_by_xpath(
-            '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[1]/a'
+            '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
         )
 
         username_text = username.text
@@ -525,6 +577,7 @@ class MyInstaPy(InstaPy):
                     True,
                     username_text,
                     is_video,
+                    image_links,
                     "Mandatory language not fulfilled",
                     "Not mandatory " "language",
                 )
@@ -540,6 +593,7 @@ class MyInstaPy(InstaPy):
                     True,
                     username_text,
                     is_video,
+                    image_links,
                     "Mandatory words not fulfilled",
                     "Not mandatory likes",
                 )
@@ -547,7 +601,7 @@ class MyInstaPy(InstaPy):
         image_text_lower = [x.lower() for x in caption]
         ignore_if_contains_lower = [x.lower() for x in self.ignore_if_contains]
         if any((word in image_text_lower for word in ignore_if_contains_lower)):
-            return False, username_text, is_video, "None", "Pass"
+            return False, username_text, is_video, image_links, "None", "Pass"
 
         dont_like_regex = []
 
@@ -581,9 +635,9 @@ class MyInstaPy(InstaPy):
                 inapp_unit = 'Inappropriate! ~ contains "{}"'.format(
                     quashed if iffy == quashed else '" in "'.join([str(iffy), str(quashed)])
                 )
-                return True, username_text, is_video, inapp_unit, "Undesired word"
+                return True, username_text, is_video, image_links, inapp_unit, "Undesired word"
 
-        return False, username_text, is_video, "None", "Success"
+        return False, username_text, is_video, image_links, "None", "Success"
 
     def nf_validate_user_call(self, username, post_link):
 
@@ -645,18 +699,10 @@ class MyInstaPy(InstaPy):
             return True, "Valid user"
 
         try:
-            self.logger.info("about to go to user page") 
-            sleep(1)
-            username_button = self.browser.find_element_by_xpath(
-                '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[1]/a'
-                '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[1]/a'
-            )
-            self.nf_scroll_into_view(username_button)
-            sleep(1)
-            self.nf_click_center_of_element(username_button)
 
-            self.logger.info("about to start checking user page") 
-            sleep(5)
+            self.nf_go_from_post_to_profile(username, post_link)
+
+            self.logger.info("about to start checking user page")
 
             # Checks the potential of target user by relationship status in order
             # to delimit actions within the desired boundary
@@ -894,17 +940,23 @@ class MyInstaPy(InstaPy):
         except NoSuchElementException:
             return False, "Unable to locate element"
         except:
+            raise
             return False, "Unknown error"
         finally:
             self.nf_find_and_press_back(post_link)
 
     def nf_find_and_press_back(self, link):
         possibles = [
-        '/html/body/div[1]/section/nav[1]/div/header/div/div[1]/a',
-        '/html/body/div[1]/section/nav[1]/div/header//a[@class=" Iazdo"]',
-        '/html/body/div[1]/section/nav[1]/div/header/div/div[1]/a/span/svg',
-        '/html/body/div[1]/section/nav[1]/div/header//a/span/svg[@class="_8-yf5 "]',
-        '/html/body/div[1]/section/nav[1]/div/header//a/span/svg[@aria-label="Back"]',
+            '/html/body/div[1]/section/nav[1]/div/header//a[@class=" Iazdo"]',
+            '/html/body/div[1]/section/nav[1]/div/header//a[@class="Iazdo"]',
+            #'/html/body/div[1]/section/nav[1]/div/header/div/div[1]/a',
+            #'/html/body/div[1]/section/nav[1]/div/header/div/div[1]/a/span/svg',
+            '/html/body/div[1]/section/nav[1]/div/header//a//*[name()="svg"][@class="_8-yf5 "]',
+            '/html/body/div[1]/section/nav[1]/div/header//a//*[name()="svg"][@class="_8-yf5"]',
+            '/html/body/div[1]/section/nav[1]/div/header//a//*[name()="svg"][@aria-label="Back"]',
+            '/html/body/div[1]/section/nav[1]/div/header//a/span/*[name()="svg"][@class="_8-yf5 "]',
+            '/html/body/div[1]/section/nav[1]/div/header//a/span/*[name()="svg"][@class="_8-yf5"]',
+            '/html/body/div[1]/section/nav[1]/div/header//a/span/*[name()="svg"][@aria-label="Back"]',
         ]
         success = False
         for back_path in possibles:
@@ -923,13 +975,238 @@ class MyInstaPy(InstaPy):
         if not success:
             self.logger.warning("Failed to get back button with all xpaths\n"
                                 "Navigating to previous page now: {}".format(link))
-            web_address_navigator(self.browser, link)
         else:
             self.logger.info("Pressed back button with xpath:\n{}".format(back_path))
+        
+        sleep(1)
+        
+        #web_address_navigator(self.browser, link)
+
         sleep(2)
 
+    def nf_go_from_post_to_profile(self, username, post_link):
+        try:
+            # Make sure we are in post page
+            #web_address_navigator(self.browser, post_link)
 
+            sleep(1)
 
+            self.logger.info("about to go to user page") 
+
+            sleep(1)
+
+            username_button = self.browser.find_element_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
+            )
+
+            self.nf_scroll_into_view(username_button)
+            
+            self.nf_click_center_of_element(username_button)
+
+            sleep(3)
+        except NoSuchElementException:
+            self.logger.warning("Failed to get user page button, navigating there")
+        except:
+            raise
+
+        user_link = "https://www.instagram.com/{}/".format(username)
+        #web_address_navigator(browser, user_link)
+
+    def process_comments(
+        self,
+        username,
+        comments,
+        image_analisis_comments
+    ):
+        if self.delimit_commenting:
+            self.commenting_approved, disapproval_reason = verify_commenting(
+                                                            self.browser,
+                                                            self.max_comments,
+                                                            self.min_comments,
+                                                            self.comments_mandatory_words,
+                                                            self.logger,
+                                                        )
+        if not commenting_approved:
+            logger.info(disapproval_reason)
+            return False
+        """
+        (
+            self.commenting_approved,
+            selected_comments,
+            disapproval_reason,
+        ) = verify_mandatory_words(
+                self.comments_mandatory_words,
+                comments,
+                self.browser,
+                self.logger,
+            )
+        """
+        if not commenting_approved:
+            self.logger.info(disapproval_reason)
+            return False
+
+        if len(image_analisis_comments) > 0:
+            selected_comments = image_analisis_comments
+
+        # smart commenting
+        if comments:
+            comment_state, msg = comment_image(
+                self.browser,
+                username,
+                selected_comments,
+                self.blacklist,
+                self.logger,
+                self.logfolder,
+            )
+            return comment_state
+
+    def nf_like_by_users(
+        usernames: list,
+        users_validated= False,
+    ):
+        """Likes some amounts of images for each usernames"""
+        if self.aborting:
+            return self
+
+        standalone = (
+            True if "like_by_users" not in self.internal_usage.keys() else False
+        )
+
+        amount = self.user_interact_amount
+        randomize = self.user_interact_random
+        media = self.user_interact_media
+
+        usernames = usernames or []
+        self.quotient_breach = False
+
+        for index, username in enumerate(usernames):
+            if self.quotient_breach:
+                break
+
+            state = {
+                'liked_img': 0,
+                'already_liked': 0,
+                'inap_img': 0,
+                'commented': 0,
+                'followed': 0,
+                'not_valid_users': 0,
+            }
+
+            self.logger.info(
+                "Username [{}/{}]".format(index + 1, len(usernames))
+            )
+            self.logger.info("--> {}".format(username.encode("utf-8")))
+
+            self.nf_go_to_user_page(username)
+
+            following = random.randint(0, 100) <= self.follow_percentage
+
+            if not users_validated:
+                validation, details = self.nf_validate_user_call(username)
+                if not validation:
+                    self.logger.info(
+                        "--> Not a valid user: {}".format(details)
+                    )
+                    not_valid_users += 1
+                    continue
+
+            try:
+                while state['liked_img'] in range(0, amount):
+
+                    if self.jumps["consequent"]["likes"] >= self.jumps["limit"]["likes"]:
+                        self.logger.warning(
+                            "--> Like quotient reached its peak!\t~leaving "
+                            "Like-By-Users activity\n"
+                        )
+                        self.quotient_breach = True
+                        # reset jump counter after a breach report
+                        self.jumps["consequent"]["likes"] = 0
+                        break
+
+                    if sc_rolled > 100:
+                        try_again += 1
+                        if try_again > 2:  # you can try again as much as you want by changing this number
+                            self.logger.info(
+                                "'{}' user POSSIBLY has less valid images than "
+                                "desired:{} found:{}...".format(
+                                    tag, amount, len(already_interacted_links))
+                            )
+                            break
+                        self.logger.info(
+                            "Scrolled too much! ~ sleeping 10 minutes")
+                        sleep(600)
+                        sc_rolled = 0
+
+                    main_elem = self.browser.find_element_by_tag_name("main")
+                    feed = main_elem.find_elements_by_xpath('//div[@class=" _2z6nI"]')
+                    self.nf_scroll_into_view(feed)
+                    posts = self.nf_get_all_posts_on_element(feed)
+
+                    # Interact with links instead of just storing them
+                    for post in posts:
+                        link = post.get_attribute("href")
+                        if link not in already_interacted_links:
+
+                            self.logger.info("about to scroll to post")
+                            sleep(1)
+                            self.nf_scroll_into_view(post)
+                            self.logger.info("about to click to post")
+                            sleep(1)
+                            self.nf_click_center_of_element(post)
+
+                            success, msg, state = self.nf_interact_with_post(
+                                link,
+                                amount,
+                                state,
+                                users_validated,
+                            )
+
+                            self.logger.info(
+                                "Returned from liking, should still be in post page")
+                            sleep(5)
+                            self.nf_find_and_press_back(
+                                "https://www.instagram.com/{}/".format(username))
+
+                            already_interacted_links.append(link)
+
+                            if success:
+                                break
+                            if msg == "block on likes":
+                                # TODO deal with block on likes
+                                break
+                    else:
+                        # For loop ended means all posts in screen has been interacted with
+                        # will scroll the screen a bit and reload
+                        for i in range(3):
+                            self.browser.execute_script(
+                                "window.scrollTo(0, document.body.scrollHeight);"
+                            )
+                            update_activity(self.browser, state=None)
+                            sc_rolled += 1
+                            sleep(scroll_nap)
+
+            except Exception:
+                raise
+
+            sleep(4)
+
+            self.logger.info("Username [{}/{}]".format(index + 1, len(usernames)))
+            self.logger.info("--> {} ended".format(tag.encode("utf-8")))
+            self.logger.info("Liked: {}".format(state['liked_img']))
+            self.logger.info("Already Liked: {}".format(state['already_liked']))
+            self.logger.info("Commented: {}".format(state['commented']))
+            self.logger.info("Followed: {}".format(state['followed']))
+            self.logger.info("Inappropriate: {}".format(state['inap_img']))
+            self.logger.info("Not valid users: {}\n".format(state['not_valid_users']))
+
+            self.liked_img += state['liked_img']
+            self.already_liked += state['already_liked']
+            self.commented += state['commented']
+            self.followed += state['followed']
+            self.inap_img += state['inap_img']
+            self.not_valid_users += state['not_valid_users']
+
+        return self
 
 
 

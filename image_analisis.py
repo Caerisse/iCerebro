@@ -1,16 +1,14 @@
 from __future__ import print_function
 from __future__ import division
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 import torchvision
-from torchvision import datasets, models, transforms
-import matplotlib.pyplot as plt
+from torchvision import models, transforms
 import time
 import os
-import copy
 from PIL import Image
+import urllib.request
+
 
 class ImageAnalisis:
     def __init__(
@@ -205,3 +203,35 @@ class ImageAnalisis:
         print("Elapsed time: {:.0f} seconds".format(elapsed_time))
 
         return out
+
+    def image_analisis(self, image_links):
+        checked_imgs = False
+        temp_comments = []
+        image_analisis_tags = []
+
+        try:
+            for link in image_links:
+                urllib.request.urlretrieve(link, "temp_img.jpg")
+                self.detect("temp_img.jpg")
+                self.classify("temp_img.jpg")
+            checked_imgs = True
+        finally:
+            return checked_imgs, temp_comments, image_analisis_tags
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -66,10 +66,10 @@ session.set_action_delays(      enabled=True,
 # quality of account to classify for being followed
 session.set_relationship_bounds(enabled=True,
                                 delimit_by_numbers=True,
-                                max_followers=config.max_followers,
-                                min_followers=config.min_followers,
-                                min_following=config.min_following,
-                                min_posts=config.min_posts          )
+                                max_followers=100000,
+                                min_followers=0,
+                                min_following=0,
+                                min_posts=1          )
 
 # Ignore everything from these users
 session.set_ignore_users(config.ignored_users)
@@ -79,8 +79,6 @@ session.set_mandatory_language(enabled=True, character_set=['LATIN'])
 
 # Not unfollow anyone whi interacted with the account
 session.set_dont_unfollow_active_users(enabled=True, posts=3)
-
-session.set_simulation(enabled=True, percentage=90)
 
 # Skip certains users (In this case will not interact with private accounts 80 percent of the time 
 # and not at all with no profile pics account)
@@ -104,21 +102,21 @@ session.set_delimit_liking( enabled=True, max_likes=None, min_likes=50 )
 session.set_comments(       config.photo_comments, 
                             media = 'Photo' )
 
-session.set_do_comment(     enabled = False,
-                            percentage = config.do_comment_percentage   )
+session.set_do_comment(     enabled = True,
+                            percentage = 100   )
 
 session.set_do_like(        enabled = True, 
-                            percentage = config.do_like_percentage      )
+                            percentage = 100      )
 
 session.set_do_follow(      enabled = True, 
-                            percentage = config.do_follow_percentage, 
+                            percentage = 100, 
                             times = config.do_follow_times              )
 
 session.set_do_story(       enabled = True, 
                             percentage = config.do_story_percentage, 
                             simulate = False                            )
 
-session.set_user_interact(  percentage = config.user_interact_percentage, 
+session.set_user_interact(  percentage = 100, 
                             amount = random.randint(config.user_interact_amount,
                                                     config.user_interact_amount*3),
                             randomize = False,  
@@ -159,8 +157,7 @@ try:
                                                         config.like_by_tags_amount_of_tags*2    )), 
                                     amount=random.randint(  config.like_by_tags_amount, 
                                                             config.like_by_tags_amount*2    ),
-                                    skip_top_posts=False, 
-                                    interact=True )
+                                    skip_top_posts=False)
 
             """ 
             # Unfollow some users who dont follow back after 3-5 days
