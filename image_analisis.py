@@ -120,8 +120,11 @@ class ImageAnalisis:
             'left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
         ]
 
-    def classify(self, image_path):
+    def classify(self, image_path, logger=None):
         t = time.process_time()
+
+        if logger:
+            logger.info("Image classify started")
 
         img = Image.open(image_path)
         img_t = self.transform_classification(img)
@@ -132,16 +135,20 @@ class ImageAnalisis:
         _, indices = torch.sort(out, descending=True)
         percentage = torch.nn.functional.softmax(out, dim=1)[0] * 100
 
-        for i in indices[0][:5]:
-            print("Classify as {}, confidence {:.2f}".format(self.labels[i],percentage[i].item()))
+        if logger:
+            for i in indices[0][:5]:
+                logger.info("    Classify as {}, confidence {:.2f}".format(self.labels[i],percentage[i].item()))
 
-        elapsed_time = time.process_time() - t
-        print("Elapsed time: {:.0f} seconds".format(elapsed_time))
+            elapsed_time = time.process_time() - t
+            logger.info("Image classify elapsed time: {:.0f} seconds".format(elapsed_time))
 
         return [[self.labels[i],percentage[i].item()] for i in indices[0][:5]]
 
-    def detect(self, image_path, detection_threshold: float = 0.7):
+    def detect(self, image_path, detection_threshold: float = 0.7, logger=None):
         t = time.process_time()
+
+        if logger:
+            logger.info("Object detection started")
 
         img = Image.open(image_path)
         img_t = self.transform_detection(img)
@@ -154,10 +161,12 @@ class ImageAnalisis:
 
         pred_t = [pred_score.index(x) for x in pred_score if x > detection_threshold]
         if pred_t == []:
-            elapsed_time = time.process_time() - t
-            print("Elapsed time: {:.0f} seconds".format(elapsed_time))
-            print("Nothing detected above threshold")
+            if logger:
+                elapsed_time = time.process_time() - t
+                logger.info("Object detection elapsed time: {:.0f} seconds".format(elapsed_time))
+                logger.info("Nothing detected above threshold")
             return None
+
         pred_t = pred_t[-1]
 
         pred_class = pred_class[:pred_t+1]
@@ -188,7 +197,10 @@ class ImageAnalisis:
 
         out = []
         for i in range(len(pred_class)):
-            print("Detected {}, confidence {:.2f}".format(pred_class[i],pred_score[i]*100))
+            if logger:
+                logger.info("    Detected {}, confidence {:.2f}".format(
+                    pred_class[i], pred_score[i]* 100)
+                )
             out.append(
                 {
                     'label': pred_class[i],
@@ -198,13 +210,13 @@ class ImageAnalisis:
                     'keypoints': pred_keypoints[i],
                 }
             )
-            
-        elapsed_time = time.process_time() - t
-        print("Elapsed time: {:.0f} seconds".format(elapsed_time))
+        if logger:     
+            elapsed_time = time.process_time() - t
+            logger.info("Object detection elapsed time: {:.0f} seconds".format(elapsed_time))
 
         return out
 
-    def image_analisis(self, image_links):
+    def image_analisis(self, image_links, detection_threshold: float = 0.7, logger=None):
         checked_imgs = False
         temp_comments = []
         image_analisis_tags = []
@@ -212,8 +224,8 @@ class ImageAnalisis:
         try:
             for link in image_links:
                 urllib.request.urlretrieve(link, "temp_img.jpg")
-                self.detect("temp_img.jpg")
-                self.classify("temp_img.jpg")
+                self.classify("temp_img.jpg", logger)
+                self.detect("temp_img.jpg", detection_threshold, logger)
             checked_imgs = True
         finally:
             return checked_imgs, temp_comments, image_analisis_tags

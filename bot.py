@@ -1,6 +1,6 @@
 # Imports
-#from natural_flow import MyInstaPy
-from instapy import InstaPy
+from natural_flow import MyInstaPy
+#from instapy import InstaPy
 from upload import upload_single_image
 import random
 import argparse
@@ -37,7 +37,7 @@ import config
 
 # get an InstaPy session and login
 # set headless_browser=True to run InstaPy in the background
-session = InstaPy(username=insta_username,
+session = MyInstaPy(username=insta_username,
                     password=insta_password,
                     want_check_browser=False,
                     headless_browser=config.headless_browser,
@@ -224,13 +224,12 @@ try:
                                             interact=True)
                                             
             # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
-            session.like_by_tags(   random.sample(config.like_tag_list, 
+            session.nf_like_by_tags(random.sample(config.like_tag_list, 
                                         random.randint( config.like_by_tags_amount_of_tags,
                                                         config.like_by_tags_amount_of_tags*2    )), 
                                     amount=random.randint(  config.like_by_tags_amount, 
                                                             config.like_by_tags_amount*2    ),
-                                    skip_top_posts=False, 
-                                    interact=True )
+                                    skip_top_posts=False)
 
 
             # Unfollow some users who dont follow back after 3-5 days

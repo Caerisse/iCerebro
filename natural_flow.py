@@ -4,15 +4,17 @@ import random
 import re
 from re import findall
 import csv
+import time
 
 from instapy import InstaPy
 from instapy.constants import MEDIA_PHOTO, MEDIA_CAROUSEL, MEDIA_ALL_TYPES
 from instapy.util import click_element, click_visibly, update_activity, format_number
 from instapy.util import web_address_navigator, get_relationship_counts, getUserData
-from instapy.util import truncate_float, default_profile_pic_instagram
+from instapy.util import truncate_float, default_profile_pic_instagram, get_current_url
 from instapy.comment_util import verify_commenting, comment_image
 from instapy.like_util import like_image, verify_liking
 from instapy.xpath import read_xpath
+from instapy.unfollow_util import follow_restriction, follow_user
 from instapy.time_util import sleep
 
 from selenium.common.exceptions import WebDriverException
@@ -28,18 +30,24 @@ class MyInstaPy(InstaPy):
 
     def __init__(
         self,
-        use_image_analisis = False,
-        classification_model_name: str = 'resnext101_32x8d', 
-        detection_model_name: str = 'fasterrcnn_resnet50_fpn',
         *args,
         **kwargs,
     ):
         super(self.__class__, self).__init__(*args, **kwargs)
 
-        self.use_image_analisis = use_image_analisis
+        self.use_image_analisis = False
+        self.ImgAn = None
 
+    def set_use_image_analisis(
+        self,
+        use_image_analisis: bool,
+        classification_model_name: str = 'resnext101_32x8d',
+        detection_model_name: str = 'fasterrcnn_resnet50_fpn',
+    ):
+        self.use_image_analisis = use_image_analisis
         if use_image_analisis:
-            self.ImgAn = ImageAnalisis(classification_model_name, detection_model_name)
+            self.ImgAn = ImageAnalisis(
+                classification_model_name, detection_model_name)
         else:
             self.ImgAn = None
 
@@ -298,7 +306,7 @@ class MyInstaPy(InstaPy):
                                         checked_img,
                                         temp_comments,
                                         image_analisis_tags,
-                                    ) = self.ImgAn.image_analisis(image_links)
+                                    ) = self.ImgAn.image_analisis(image_links, logger=self.logger)
                                     # TODO: image_analisis
                                 except Exception as err:
                                     self.logger.error(
@@ -318,7 +326,7 @@ class MyInstaPy(InstaPy):
                                 success = self.process_comments(user_name, comments, temp_comments)
 
                                 if success:
-                                    commented += 1
+                                    state['commented'] += 1
                             else:
                                 self.logger.info("--> Not commented")
                                 sleep(1)
@@ -334,7 +342,6 @@ class MyInstaPy(InstaPy):
                                 )
                             ):
 
-                                #self.nf_go_from_post_to_profile(user_name, link)
                                 self.logger.info("about to follow user")
                                 sleep(5)
 
@@ -349,7 +356,7 @@ class MyInstaPy(InstaPy):
                                     self.logfolder,
                                 )
                                 if follow_state is True:
-                                    followed += 1
+                                    state['followed'] += 1
 
                                 self.logger.info("user followed")
                                 sleep(5)
@@ -425,10 +432,13 @@ class MyInstaPy(InstaPy):
             self.nf_click_center_of_element(tag_option)
             sleep(1)
         except NoSuchElementException:
-            self.logger.warning("Failed to go to tag page naturally, navigating there")
-        #web_address_navigator(
-        #    self.browser, "https://www.instagram.com/explore/tags/{}/".format(tag)
-        #)
+            self.logger.warning("Failed to get a page element")
+
+        tag_link = "https://www.instagram.com/explore/tags/{}/".format(tag)
+        if not self.check_if_in_correct_page(tag_link):
+            self.logger.error("Failed to go to tag page, navigating there")
+            #TODO: retry to get there naturally
+            web_address_navigator(self.browser, tag_link)
 
     def nf_go_to_user_page(self, username):
         try:
@@ -457,10 +467,13 @@ class MyInstaPy(InstaPy):
 
             sleep(1)
         except NoSuchElementException:
-            self.logger.warning("Failed to go to user page naturally, navigating there")
-        #web_address_navigator(
-        #    self.browser, "https://www.instagram.com/{}/".format(username)
-        #)
+            self.logger.warning("Failed to go to get a page element")
+
+        user_link = "https://www.instagram.com/{}/".format(username)
+        if not self.check_if_in_correct_page(user_link):
+            self.logger.error("Failed to go to user page, navigating there")
+            #TODO: retry to get there naturally
+            web_address_navigator(self.browser, user_link)
 
     def nf_scroll_into_view(self, element):
         desired_y = (element.size['height'] / 2) + element.location['y']
@@ -494,150 +507,154 @@ class MyInstaPy(InstaPy):
         # Check URL of the webpage, if it already is post's page, then do not
         # navigate to it again, should never do anything
         #web_address_navigator(self.browser, post_link)
-        sleep(2)
-        
-        username = self.browser.find_element_by_xpath(
-            '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
-        )
-
-        username_text = username.text
-
-        follow_button = self.browser.find_element_by_xpath(
-            '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[2]/button'
-        )
-
-        following = follow_button.text == "Following"
-
-        locations = self.browser.find_elements_by_xpath(
-            '/html/body/div[1]/section/main/div/div/article/header//a[contains(@href,"locations")]'
-        )
-
-        location_text = locations[0].text if locations != [] else None
-        location_link = locations[0].get_attribute('href') if locations != [] else None
-
-        images = self.browser.find_elements_by_xpath(
-            '/html/body/div[1]/section/main/div/div/article//img[@class="FFVAD"]'
-        )
-        """
-        video_previews = self.browser.find_elements_by_xpath(
-            '/html/body/div[1]/section/main/div/div/article//img[@class="_8jZFn"]'
-        )
-        videos = self.browser.find_elements_by_xpath(
-            '/html/body/div[1]/section/main/div/div/article//video[@class="tWeCl"]'
-        )
-        """
-        
-        """
-        if (len(images) + len(videos)) == 1:
-            # single image or video
-        elif len(images) == 2:
-            # carrousel
-        """
-
-        is_video = len(images)==0
-
-        image_descriptions = []
-        image_links = []
-        for image in images:
-            image_description = image.get_attribute('alt')
-            if image_description is not None and 'Image may contain:' in image_description:
-                image_description = image_description[image_description.index('Image may contain:') + 19 :]
-            else:
-                image_description = None
-            image_descriptions.append(image_description)
-            image_links.append(image.get_attribute('src'))
-
-
-        more_button = self.browser.find_elements_by_xpath("//button[text()='more']")
-        if more_button != []:
-            self.nf_scroll_into_view(more_button[0])
-            more_button[0].click()
- 
-        caption = self.browser.find_element_by_xpath(
-            "/html/body/div[1]/section/main/div/div/article//div[2]/div[1]//div/span/span"
-        ).text
-
-        comments_button = self.browser.find_elements_by_xpath(
-            '//article//div[2]/div[1]//a[contains(@href,"comments")]'
-        )
-
-        self.logger.info("Image from: {}".format(username_text.encode("utf-8")))
-        self.logger.info("Link: {}".format(post_link.encode("utf-8")))
-        self.logger.info("Caption: {}".format(caption.encode("utf-8")))
-        for image_description in image_descriptions:
-            if image_description:
-                self.logger.info("Description: {}".format(image_description.encode("utf-8")))
-        
-
-        # Check if mandatory character set, before adding the location to the text
-        caption = "" if caption is None else caption
-        if self.mandatory_language:
-            if not self.check_character_set(caption):
-                return (
-                    True,
-                    username_text,
-                    is_video,
-                    image_links,
-                    "Mandatory language not fulfilled",
-                    "Not mandatory " "language",
-                )
-
-        # Append location to image_text so we can search through both in one go
-        if location_text:
-            self.logger.info("Location: {}".format(location_text.encode("utf-8")))
-            caption = caption + "\n" + location_text
-
-        if self.mandatory_words:
-            if not any((word in image_text for word in self.mandatory_words)):
-                return (
-                    True,
-                    username_text,
-                    is_video,
-                    image_links,
-                    "Mandatory words not fulfilled",
-                    "Not mandatory likes",
-                )
-
-        image_text_lower = [x.lower() for x in caption]
-        ignore_if_contains_lower = [x.lower() for x in self.ignore_if_contains]
-        if any((word in image_text_lower for word in ignore_if_contains_lower)):
-            return False, username_text, is_video, image_links, "None", "Pass"
-
-        dont_like_regex = []
-
-        for dont_likes in self.dont_like:
-            if dont_likes.startswith("#"):
-                dont_like_regex.append(dont_likes + r"([^\d\w]|$)")
-            elif dont_likes.startswith("["):
-                dont_like_regex.append("#" + dont_likes[1:] + r"[\d\w]+([^\d\w]|$)")
-            elif dont_likes.startswith("]"):
-                dont_like_regex.append(r"#[\d\w]+" + dont_likes[1:] + r"([^\d\w]|$)")
-            else:
-                dont_like_regex.append(r"#[\d\w]*" + dont_likes + r"[\d\w]*([^\d\w]|$)")
-
-        for dont_likes_regex in dont_like_regex:
-            quash = re.search(dont_likes_regex, caption, re.IGNORECASE)
-            if quash:
-                quashed = (
-                    (((quash.group(0)).split("#")[1]).split(" ")[0])
-                    .split("\n")[0]
-                    .encode("utf-8")
-                )  # dismiss possible space and newlines
-                iffy = (
-                    (re.split(r"\W+", dont_likes_regex))[3]
-                    if dont_likes_regex.endswith("*([^\\d\\w]|$)")
-                    else (re.split(r"\W+", dont_likes_regex))[1]  # 'word' without format
-                    if dont_likes_regex.endswith("+([^\\d\\w]|$)")
-                    else (re.split(r"\W+", dont_likes_regex))[3]  # '[word'
-                    if dont_likes_regex.startswith("#[\\d\\w]+")
-                    else (re.split(r"\W+", dont_likes_regex))[1]  # ']word'
-                )  # '#word'
-                inapp_unit = 'Inappropriate! ~ contains "{}"'.format(
-                    quashed if iffy == quashed else '" in "'.join([str(iffy), str(quashed)])
-                )
-                return True, username_text, is_video, image_links, inapp_unit, "Undesired word"
-
-        return False, username_text, is_video, image_links, "None", "Success"
+        try: 
+            t = time.process_time()
+    
+            username = self.browser.find_element_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
+            )
+    
+            username_text = username.text
+    
+            follow_button = self.browser.find_element_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[2]/button'
+            )
+    
+            following = follow_button.text == "Following"
+    
+            locations = self.browser.find_elements_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article/header//a[contains(@href,"locations")]'
+            )
+    
+            location_text = locations[0].text if locations != [] else None
+            location_link = locations[0].get_attribute('href') if locations != [] else None
+    
+            images = self.browser.find_elements_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article//img[@class="FFVAD"]'
+            )
+            """
+            video_previews = self.browser.find_elements_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article//img[@class="_8jZFn"]'
+            )
+            videos = self.browser.find_elements_by_xpath(
+                '/html/body/div[1]/section/main/div/div/article//video[@class="tWeCl"]'
+            )
+            """
+            
+            """
+            if (len(images) + len(videos)) == 1:
+                # single image or video
+            elif len(images) == 2:
+                # carrousel
+            """
+    
+            is_video = len(images)==0
+    
+            image_descriptions = []
+            image_links = []
+            for image in images:
+                image_description = image.get_attribute('alt')
+                if image_description is not None and 'Image may contain:' in image_description:
+                    image_description = image_description[image_description.index('Image may contain:') + 19 :]
+                else:
+                    image_description = None
+                image_descriptions.append(image_description)
+                image_links.append(image.get_attribute('src'))
+    
+    
+            more_button = self.browser.find_elements_by_xpath("//button[text()='more']")
+            if more_button != []:
+                self.nf_scroll_into_view(more_button[0])
+                more_button[0].click()
+     
+            caption = self.browser.find_element_by_xpath(
+                "/html/body/div[1]/section/main/div/div/article//div[2]/div[1]//div/span/span"
+            ).text
+    
+            comments_button = self.browser.find_elements_by_xpath(
+                '//article//div[2]/div[1]//a[contains(@href,"comments")]'
+            )
+    
+            self.logger.info("Image from: {}".format(username_text.encode("utf-8")))
+            self.logger.info("Link: {}".format(post_link.encode("utf-8")))
+            self.logger.info("Caption: {}".format(caption.encode("utf-8")))
+            for image_description in image_descriptions:
+                if image_description:
+                    self.logger.info("Description: {}".format(image_description.encode("utf-8")))
+            
+    
+            # Check if mandatory character set, before adding the location to the text
+            caption = "" if caption is None else caption
+            if self.mandatory_language:
+                if not self.check_character_set(caption):
+                    return (
+                        True,
+                        username_text,
+                        is_video,
+                        image_links,
+                        "Mandatory language not fulfilled",
+                        "Not mandatory " "language",
+                    )
+    
+            # Append location to image_text so we can search through both in one go
+            if location_text:
+                self.logger.info("Location: {}".format(location_text.encode("utf-8")))
+                caption = caption + "\n" + location_text
+    
+            if self.mandatory_words:
+                if not any((word in image_text for word in self.mandatory_words)):
+                    return (
+                        True,
+                        username_text,
+                        is_video,
+                        image_links,
+                        "Mandatory words not fulfilled",
+                        "Not mandatory likes",
+                    )
+    
+            image_text_lower = [x.lower() for x in caption]
+            ignore_if_contains_lower = [x.lower() for x in self.ignore_if_contains]
+            if any((word in image_text_lower for word in ignore_if_contains_lower)):
+                return False, username_text, is_video, image_links, "None", "Pass"
+    
+            dont_like_regex = []
+    
+            for dont_likes in self.dont_like:
+                if dont_likes.startswith("#"):
+                    dont_like_regex.append(dont_likes + r"([^\d\w]|$)")
+                elif dont_likes.startswith("["):
+                    dont_like_regex.append("#" + dont_likes[1:] + r"[\d\w]+([^\d\w]|$)")
+                elif dont_likes.startswith("]"):
+                    dont_like_regex.append(r"#[\d\w]+" + dont_likes[1:] + r"([^\d\w]|$)")
+                else:
+                    dont_like_regex.append(r"#[\d\w]*" + dont_likes + r"[\d\w]*([^\d\w]|$)")
+    
+            for dont_likes_regex in dont_like_regex:
+                quash = re.search(dont_likes_regex, caption, re.IGNORECASE)
+                if quash:
+                    quashed = (
+                        (((quash.group(0)).split("#")[1]).split(" ")[0])
+                        .split("\n")[0]
+                        .encode("utf-8")
+                    )  # dismiss possible space and newlines
+                    iffy = (
+                        (re.split(r"\W+", dont_likes_regex))[3]
+                        if dont_likes_regex.endswith("*([^\\d\\w]|$)")
+                        else (re.split(r"\W+", dont_likes_regex))[1]  # 'word' without format
+                        if dont_likes_regex.endswith("+([^\\d\\w]|$)")
+                        else (re.split(r"\W+", dont_likes_regex))[3]  # '[word'
+                        if dont_likes_regex.startswith("#[\\d\\w]+")
+                        else (re.split(r"\W+", dont_likes_regex))[1]  # ']word'
+                    )  # '#word'
+                    inapp_unit = 'Inappropriate! ~ contains "{}"'.format(
+                        quashed if iffy == quashed else '" in "'.join([str(iffy), str(quashed)])
+                    )
+                    return True, username_text, is_video, image_links, inapp_unit, "Undesired word"
+    
+            return False, username_text, is_video, image_links, "None", "Success"
+        finally:
+            elapsed_time = time.process_time() - t
+            self.logger.info("check post elapsed time: {:.0f} seconds".format(elapsed_time))
 
     def nf_validate_user_call(self, username, post_link):
 
@@ -700,7 +717,7 @@ class MyInstaPy(InstaPy):
 
         try:
 
-            self.nf_go_from_post_to_profile(username, post_link)
+            self.nf_go_from_post_to_profile(username)
 
             self.logger.info("about to start checking user page")
 
@@ -973,22 +990,19 @@ class MyInstaPy(InstaPy):
                     #self.logger.warning("Failed to get back button with xpath:\n{}".format(back_path))
 
         if not success:
-            self.logger.warning("Failed to get back button with all xpaths\n"
-                                "Navigating to previous page now: {}".format(link))
+            self.logger.warning("Failed to get back button with all xpaths")
         else:
-            self.logger.info("Pressed back button with xpath:\n{}".format(back_path))
+            self.logger.info("Pressed back button with xpath:\n     {}".format(back_path))
         
-        sleep(1)
-        
-        #web_address_navigator(self.browser, link)
+        if not self.check_if_in_correct_page(link):
+            self.logger.error("Failed to go back, navigating there")
+            #TODO: retry to get there naturally
+            web_address_navigator(self.browser, link)
 
         sleep(2)
 
-    def nf_go_from_post_to_profile(self, username, post_link):
+    def nf_go_from_post_to_profile(self, username):
         try:
-            # Make sure we are in post page
-            #web_address_navigator(self.browser, post_link)
-
             sleep(1)
 
             self.logger.info("about to go to user page") 
@@ -1002,15 +1016,18 @@ class MyInstaPy(InstaPy):
             self.nf_scroll_into_view(username_button)
             
             self.nf_click_center_of_element(username_button)
-
+            self.logger.info("clicked username button")
             sleep(3)
         except NoSuchElementException:
-            self.logger.warning("Failed to get user page button, navigating there")
+            self.logger.warning("Failed to get user page button")
         except:
             raise
-
+        
         user_link = "https://www.instagram.com/{}/".format(username)
-        #web_address_navigator(browser, user_link)
+        if not self.check_if_in_correct_page(user_link):
+            self.logger.error("Failed to go to user page, navigating there")
+            #TODO: retry to get there naturally
+            web_address_navigator(self.browser, user_link)
 
     def process_comments(
         self,
@@ -1026,34 +1043,23 @@ class MyInstaPy(InstaPy):
                                                             self.comments_mandatory_words,
                                                             self.logger,
                                                         )
-        if not commenting_approved:
+        if not self.commenting_approved:
             logger.info(disapproval_reason)
             return False
-        """
-        (
-            self.commenting_approved,
-            selected_comments,
-            disapproval_reason,
-        ) = verify_mandatory_words(
-                self.comments_mandatory_words,
-                comments,
-                self.browser,
-                self.logger,
-            )
-        """
-        if not commenting_approved:
+        
+        if not self.commenting_approved:
             self.logger.info(disapproval_reason)
             return False
 
         if len(image_analisis_comments) > 0:
-            selected_comments = image_analisis_comments
+            comments = image_analisis_comments
 
         # smart commenting
         if comments:
             comment_state, msg = comment_image(
                 self.browser,
                 username,
-                selected_comments,
+                comments,
                 self.blacklist,
                 self.logger,
                 self.logfolder,
@@ -1061,6 +1067,7 @@ class MyInstaPy(InstaPy):
             return comment_state
 
     def nf_like_by_users(
+        self,
         usernames: list,
         users_validated= False,
     ):
@@ -1097,7 +1104,10 @@ class MyInstaPy(InstaPy):
             )
             self.logger.info("--> {}".format(username.encode("utf-8")))
 
-            self.nf_go_to_user_page(username)
+            if len(usernames) == 1 and users_validated:
+                self.nf_go_from_post_to_profile(username)
+            else:
+                self.nf_go_to_user_page(username)
 
             following = random.randint(0, 100) <= self.follow_percentage
 
@@ -1110,6 +1120,10 @@ class MyInstaPy(InstaPy):
                     not_valid_users += 1
                     continue
 
+            try_again = 0
+            sc_rolled = 0
+            scroll_nap = 1.5
+            already_interacted_links = []
             try:
                 while state['liked_img'] in range(0, amount):
 
@@ -1138,9 +1152,8 @@ class MyInstaPy(InstaPy):
                         sc_rolled = 0
 
                     main_elem = self.browser.find_element_by_tag_name("main")
-                    feed = main_elem.find_elements_by_xpath('//div[@class=" _2z6nI"]')
-                    self.nf_scroll_into_view(feed)
-                    posts = self.nf_get_all_posts_on_element(feed)
+                    #feed = main_elem.find_elements_by_xpath('//div[@class=" _2z6nI"]')
+                    posts = self.nf_get_all_posts_on_element(main_elem)
 
                     # Interact with links instead of just storing them
                     for post in posts:
@@ -1191,7 +1204,7 @@ class MyInstaPy(InstaPy):
             sleep(4)
 
             self.logger.info("Username [{}/{}]".format(index + 1, len(usernames)))
-            self.logger.info("--> {} ended".format(tag.encode("utf-8")))
+            self.logger.info("--> {} ended".format(username.encode("utf-8")))
             self.logger.info("Liked: {}".format(state['liked_img']))
             self.logger.info("Already Liked: {}".format(state['already_liked']))
             self.logger.info("Commented: {}".format(state['commented']))
@@ -1207,6 +1220,27 @@ class MyInstaPy(InstaPy):
             self.not_valid_users += state['not_valid_users']
 
         return self
+
+    def check_if_in_correct_page(self, desired_link):
+        current_url = get_current_url(self.browser)
+
+        if current_url is None or desired_link is None:
+            return False
+
+        # remove slashes at the end to compare efficiently
+        if current_url.endswith("/"):
+            current_url = current_url[:-1]
+
+        if desired_link.endswith("/"):
+            desired_link = desired_link[:-1]
+
+        return current_url == desired_link
+
+
+
+
+
+
 
 
 

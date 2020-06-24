@@ -30,6 +30,8 @@ session = MyInstaPy(  username=insta_username,
 
 session.login()
 
+session.set_use_image_analisis(True)
+
 # dont stop following these people
 session.set_dont_include(config.friend_list)
     
@@ -66,7 +68,7 @@ session.set_action_delays(      enabled=True,
 # quality of account to classify for being followed
 session.set_relationship_bounds(enabled=True,
                                 delimit_by_numbers=True,
-                                max_followers=100000,
+                                max_followers=1000000,
                                 min_followers=0,
                                 min_following=0,
                                 min_posts=1          )
@@ -78,7 +80,7 @@ session.set_ignore_users(config.ignored_users)
 session.set_mandatory_language(enabled=True, character_set=['LATIN'])
 
 # Not unfollow anyone whi interacted with the account
-session.set_dont_unfollow_active_users(enabled=True, posts=3)
+#session.set_dont_unfollow_active_users(enabled=True, posts=3)
 
 # Skip certains users (In this case will not interact with private accounts 80 percent of the time 
 # and not at all with no profile pics account)
@@ -103,7 +105,7 @@ session.set_comments(       config.photo_comments,
                             media = 'Photo' )
 
 session.set_do_comment(     enabled = True,
-                            percentage = 100   )
+                            percentage = 0   )
 
 session.set_do_like(        enabled = True, 
                             percentage = 100      )
