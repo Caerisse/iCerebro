@@ -93,7 +93,7 @@ session.set_ignore_users(config.ignored_users)
 session.set_mandatory_language(enabled=True, character_set=['LATIN'])
 
 # Not unfollow anyone whi interacted with the account
-session.set_dont_unfollow_active_users(enabled=True, posts=3)
+#session.set_dont_unfollow_active_users(enabled=True, posts=3)
 
 session.set_simulation(enabled=True, percentage=90)
 
@@ -213,7 +213,7 @@ try:
             #Accept follow requests
             session.accept_follow_requests( amount=config.accept_follow_requests_amount, 
                                             sleep_delay=config.accept_follow_requests_sleep_delay)
-
+            
             # Follow some users of given account followers
             session.follow_user_followers(  random.sample(config.similar_accounts, 
                                                 random.randint( config.follow_user_followers_amount_of_accounts,
@@ -222,7 +222,7 @@ try:
                                                                     config.follow_user_followers_amount*2   ), 
                                             randomize=True, 
                                             interact=True)
-                                            
+                                       
             # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
             session.nf_like_by_tags(random.sample(config.like_tag_list, 
                                         random.randint( config.like_by_tags_amount_of_tags,
@@ -231,18 +231,19 @@ try:
                                                             config.like_by_tags_amount*2    ),
                                     skip_top_posts=False)
 
-
+            """
             # Unfollow some users who dont follow back after 3-5 days
             session.unfollow_users( amount=20, instapy_followed_enabled=True, 
                                     instapy_followed_param="nonfollowers", style="RANDOM", 
                                     unfollow_after=random.randint(72, 120)*60*60, sleep_delay=random.randint(403,501))
-    
+            """
         
 except KeyboardInterrupt:
     pass
 except ConnectionRefusedError:
     print("User: {} was blocked by instagram".format(insta_username))
 finally:
+    session.db.session.close()
     session.end()
 
     

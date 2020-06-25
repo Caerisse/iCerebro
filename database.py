@@ -48,15 +48,15 @@ class Post(Base):
     id = Column('id', Integer, Sequence('post_id_seq'), primary_key=True)
     date_posted = Column('date_posted', DateTime, nullable=False)
     user_id = Column('user_id', ForeignKey('users.id'), nullable=False)
-    src = Column('src', String(200), nullable=False)
-    caption = Column('caption', String(2200), nullable=True)
+    src = Column('src', String(500), nullable=False, unique=True)
+    caption = Column('caption', String(3000), nullable=True)
 
     user = relationship('User', foreign_keys=[user_id])
     comments = relationship('Comment')
 
-    ig_desciption = Column('ig_desciption', String(500))
-    objects_detected = Column('objects_detected', String(500))
-    classified_as = Column('classified_as', String(500))
+    ig_desciption = Column('ig_desciption', String(1000), nullable=True)
+    objects_detected = Column('objects_detected', String(1000), nullable=True)
+    classified_as = Column('classified_as', String(500), nullable=True)
 
 
 class Comment(Base):
@@ -66,7 +66,7 @@ class Comment(Base):
     date_posted = Column('date_posted', DateTime, nullable=False)
     user_id = Column('user_id', ForeignKey('users.id'))
     post_id = Column('post_id', ForeignKey('posts.id'))
-    text = Column('text', String(2200))
+    text = Column('text', String(3000))
 
     user = relationship('User', foreign_keys=[user_id])
     post = relationship('Post', foreign_keys=[post_id])
@@ -76,6 +76,13 @@ db_string = 'postgres://caerisse@localhost:5432/instagram'
 Base.metadata.create_all(create_engine(db_string))
 
 '''
+CREATE DATABASE "instagram"
+    WITH OWNER "caerisse"
+    ENCODING 'UTF8'
+    LC_COLLATE = 'en_US.UTF-8'
+    LC_CTYPE = 'en_US.UTF-8'
+    TEMPLATE template0;
+
 Usage:
 from database import IgDb, User, Post, Comment
 

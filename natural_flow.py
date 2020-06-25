@@ -11,6 +11,7 @@ from instapy.constants import MEDIA_PHOTO, MEDIA_CAROUSEL, MEDIA_ALL_TYPES
 from instapy.util import click_element, click_visibly, update_activity, format_number
 from instapy.util import web_address_navigator, get_relationship_counts, getUserData
 from instapy.util import truncate_float, default_profile_pic_instagram, get_current_url
+from instapy.util import deform_emojis
 from instapy.comment_util import verify_commenting, comment_image
 from instapy.like_util import like_image, verify_liking
 from instapy.xpath import read_xpath
@@ -24,6 +25,8 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
 
 from image_analisis import ImageAnalisis
+from database import IgDb, User, Post, Comment
+from datetime import datetime
 
 
 class MyInstaPy(InstaPy):
@@ -37,6 +40,7 @@ class MyInstaPy(InstaPy):
 
         self.use_image_analisis = False
         self.ImgAn = None
+        self.db = IgDb()
 
     def set_use_image_analisis(
         self,
@@ -430,7 +434,7 @@ class MyInstaPy(InstaPy):
             )
             #self.browser.execute_script("arguments[0].click();", tag_option)
             self.nf_click_center_of_element(tag_option)
-            sleep(1)
+            sleep(2)
         except NoSuchElementException:
             self.logger.warning("Failed to get a page element")
 
@@ -465,7 +469,7 @@ class MyInstaPy(InstaPy):
 
             self.nf_click_center_of_element(user_option)
 
-            sleep(1)
+            sleep(2)
         except NoSuchElementException:
             self.logger.warning("Failed to go to get a page element")
 
@@ -507,14 +511,16 @@ class MyInstaPy(InstaPy):
         # Check URL of the webpage, if it already is post's page, then do not
         # navigate to it again, should never do anything
         #web_address_navigator(self.browser, post_link)
+        t = time.perf_counter()
         try: 
-            t = time.process_time()
-    
             username = self.browser.find_element_by_xpath(
                 '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
             )
-    
             username_text = username.text
+
+            user = self.get_or_create_user(username_text)
+            self.db.session.add(user)
+            self.db.session.commit()
     
             follow_button = self.browser.find_element_by_xpath(
                 '/html/body/div[1]/section/main/div/div/article/header/div[2]/div[1]/div[2]/button'
@@ -525,6 +531,14 @@ class MyInstaPy(InstaPy):
             locations = self.browser.find_elements_by_xpath(
                 '/html/body/div[1]/section/main/div/div/article/header//a[contains(@href,"locations")]'
             )
+
+            try: 
+                post_date = self.browser.find_element_by_xpath(
+                    '/html/body/div[1]/section/main/div/div/article//a[@class="c-Yi7"]/time'
+                ).get_attribute('datetime')
+                post_date = datetime.fromisoformat(post_date[:-1])
+            except:
+                post_date = datetime.now()
     
             location_text = locations[0].text if locations != [] else None
             location_link = locations[0].get_attribute('href') if locations != [] else None
@@ -550,17 +564,6 @@ class MyInstaPy(InstaPy):
     
             is_video = len(images)==0
     
-            image_descriptions = []
-            image_links = []
-            for image in images:
-                image_description = image.get_attribute('alt')
-                if image_description is not None and 'Image may contain:' in image_description:
-                    image_description = image_description[image_description.index('Image may contain:') + 19 :]
-                else:
-                    image_description = None
-                image_descriptions.append(image_description)
-                image_links.append(image.get_attribute('src'))
-    
     
             more_button = self.browser.find_elements_by_xpath("//button[text()='more']")
             if more_button != []:
@@ -571,9 +574,36 @@ class MyInstaPy(InstaPy):
                 "/html/body/div[1]/section/main/div/div/article//div[2]/div[1]//div/span/span"
             ).text
     
-            comments_button = self.browser.find_elements_by_xpath(
-                '//article//div[2]/div[1]//a[contains(@href,"comments")]'
-            )
+            caption = "" if caption is None else caption
+            
+
+            image_descriptions = []
+            image_links = []
+            db_posts = []
+            for image in images:
+                image_description = image.get_attribute('alt')
+                if image_description is not None and 'Image may contain:' in image_description:
+                    image_description = image_description[image_description.index(
+                        'Image may contain:') + 19:]
+                else:
+                    image_description = None
+
+                image_descriptions.append(image_description)
+                image_links.append(image.get_attribute('src'))
+
+                db_posts.append(
+                    self.get_or_create_post(
+                        post_date,
+                        image.get_attribute('src'),
+                        caption,
+                        user,
+                        image_description
+                    )
+                )
+
+            for post in db_posts:
+                self.db.session.add(post)
+                self.db.session.commit()
     
             self.logger.info("Image from: {}".format(username_text.encode("utf-8")))
             self.logger.info("Link: {}".format(post_link.encode("utf-8")))
@@ -582,9 +612,11 @@ class MyInstaPy(InstaPy):
                 if image_description:
                     self.logger.info("Description: {}".format(image_description.encode("utf-8")))
             
+            if db_posts != []:
+                self.logger.info("About to store comments")
+                self.check_and_store_comments(db_posts, post_link)
     
             # Check if mandatory character set, before adding the location to the text
-            caption = "" if caption is None else caption
             if self.mandatory_language:
                 if not self.check_character_set(caption):
                     return (
@@ -652,8 +684,12 @@ class MyInstaPy(InstaPy):
                     return True, username_text, is_video, image_links, inapp_unit, "Undesired word"
     
             return False, username_text, is_video, image_links, "None", "Success"
+        except:
+            self.db.session.rollback()
+            raise
         finally:
-            elapsed_time = time.process_time() - t
+            self.db.session.commit()
+            elapsed_time = time.perf_counter() - t
             self.logger.info("check post elapsed time: {:.0f} seconds".format(elapsed_time))
 
     def nf_validate_user_call(self, username, post_link):
@@ -716,6 +752,8 @@ class MyInstaPy(InstaPy):
             return True, "Valid user"
 
         try:
+            user = self.get_or_create_user(username)
+            self.db.session.add(user)
 
             self.nf_go_from_post_to_profile(username)
 
@@ -765,6 +803,12 @@ class MyInstaPy(InstaPy):
                     )
                 )
 
+                
+                user.date_checked = datetime.now()
+                user.followers_count = followers_count
+                user.following_count = following_count
+
+    
                 if followers_count or following_count:
                     if potency_ratio and not delimit_by_numbers:
                         if relationship_ratio and relationship_ratio < potency_ratio:
@@ -839,6 +883,9 @@ class MyInstaPy(InstaPy):
                     self.logger.error("~cannot get number of posts for username")
                     inap_msg = "---> Sorry, couldn't check for number of posts of " "username\n"
                     return False, inap_msg
+
+                user.posts_count = number_of_posts
+
                 if max_posts:
                     if number_of_posts > max_posts:
                         inap_msg = (
@@ -957,9 +1004,11 @@ class MyInstaPy(InstaPy):
         except NoSuchElementException:
             return False, "Unable to locate element"
         except:
+            self.db.session.rollback()
             raise
             return False, "Unknown error"
         finally:
+            self.db.session.commit()
             self.nf_find_and_press_back(post_link)
 
     def nf_find_and_press_back(self, link):
@@ -1236,11 +1285,113 @@ class MyInstaPy(InstaPy):
 
         return current_url == desired_link
 
+    def check_and_store_comments(self, posts, post_link):
+        try:
+            comments_button = self.browser.find_elements_by_xpath(
+                '//article//div[2]/div[1]//a[contains(@href,"comments")]'
+            )
+            if comments_button != []:
 
+                self.nf_scroll_into_view(comments_button[0])
+                self.nf_click_center_of_element(comments_button[0])
+                sleep(2)
 
+                comments_link = post_link + 'comments/'
 
+                if not self.check_if_in_correct_page(comments_link):
+                    self.logger.error("Failed to go to comments page, navigating there")
+                    #TODO: retry to get there naturally
+                    web_address_navigator(self.browser, comments_link)
+                
+                more_comments = self.browser.find_elements_by_xpath(
+                    '//span[@aria-label="Load more comments"]'
+                )
+                counter = 1
+                while more_comments != [] and counter <= 10:
+                    self.logger.info("Loading comments ({}/10)...".format(counter))
+                    self.nf_scroll_into_view(more_comments[0])
+                    self.browser.execute_script(
+                        "arguments[0].click();", more_comments[0])
+                    more_comments = self.browser.find_elements_by_xpath(
+                        '//span[@aria-label="Load more comments"]'
+                    )
+                    counter += 1
+     
+                comments = self.browser.find_elements_by_xpath(
+                    '/html/body/div[1]/section/main/div/ul/ul[@class="Mr508"]'
+                )
+                for comment in comments:
+                    inner_container = comment.find_element_by_xpath(
+                        './/div[@class="C4VMK"]'
+                    )
+                    username = inner_container.find_element_by_xpath('.//h3/div/a').text
+                    text, _ = deform_emojis(inner_container.find_element_by_xpath('.//span').text)
+                    post_date = inner_container.find_element_by_xpath(
+                        './/time').get_attribute('datetime')
+                    post_date = datetime.fromisoformat(post_date[:-1])
+     
+                    user = self.get_or_create_user(username)
+                    self.db.session.add(user)
+                    self.db.session.commit()
+     
+                    for post in posts:
+                        comment = Comment(
+                            date_posted = post_date,
+                            text = text,
+                            user = user,
+                            post = post,
+                        )
+                        self.db.session.add(comment)
+                        self.db.session.commit()
+            else:
+                self.logger.error("No comments found")
+        except:
+            self.db.session.rollback()
+            raise
+        finally:
+            self.db.session.commit()
+            self.nf_find_and_press_back(post_link)
 
+    def get_or_create_user(self, username):
+        user = None
+        users = self.db.session.query(User).filter(User.username == username).all()
+        if users == []:
+             user = User(
+                 date_checked=datetime.now(),
+                 username=username,
+             )
+        else:
+             user = users[0]
+        return user
 
+    def get_or_create_post(
+        self,
+        post_date,
+        src_link,
+        caption,
+        user,
+        ig_desciption = None,
+        objects_detected = None,
+        classified_as = None,
+    ):
+        caption, _ = deform_emojis(caption)
+        if ig_desciption:
+            ig_desciption, _ = deform_emojis(ig_desciption)
+        post = None
+        posts = self.db.session.query(Post).filter(Post.src == src_link).all()
+        if posts == []:
+            post = Post(
+                date_posted = post_date,
+                src = src_link,
+                caption = caption,
+                user = user,
+                ig_desciption = ig_desciption,
+                objects_detected = objects_detected,
+                classified_as= classified_as,
+            )
+        else:
+            post = posts[0]
+        return post
 
 
 
