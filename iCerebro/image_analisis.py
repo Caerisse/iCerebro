@@ -1,20 +1,18 @@
 from __future__ import print_function
 from __future__ import division
 import torch
-import numpy as np
-import torchvision
 from torchvision import models, transforms
 import time
-import os
 from PIL import Image
 import urllib.request
 
 
-class ImageAnalisis:
+class ImageAnalysis:
+    # noinspection PyUnresolvedReferences
     def __init__(
-        self, 
-        classification_model_name: str = 'resnext101_32x8d', 
-        detection_model_name: str = 'fasterrcnn_resnet50_fpn',
+            self,
+            classification_model_name: str = 'resnext101_32x8d',
+            detection_model_name: str = 'fasterrcnn_resnet50_fpn',
     ):
 
         input_size = 224
@@ -62,7 +60,6 @@ class ImageAnalisis:
         else:
             raise ValueError('Incompatible classification model name')
 
-
         # Detection Model
         if detection_model_name == 'fasterrcnn_resnet50_fpn':
             self.model_detection = models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
@@ -73,17 +70,14 @@ class ImageAnalisis:
         else:
             raise ValueError('Incompatible detection model name')
 
-
         # Detect if we have a GPU available
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_classification = self.model_classification.to(device)
         self.model_detection = self.model_detection.to(device)
 
-
         # Put models in evaluation mode
         self.model_classification.eval()
         self.model_detection.eval()
-
 
         # Define tensor transform
         self.transform_classification = transforms.Compose([
@@ -120,6 +114,7 @@ class ImageAnalisis:
             'left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
         ]
 
+    # noinspection PyTypeChecker
     def classify(self, image_path, logger=None):
         t = time.process_time()
 
@@ -137,12 +132,12 @@ class ImageAnalisis:
 
         if logger:
             for i in indices[0][:5]:
-                logger.info("    Classify as {}, confidence {:.2f}".format(self.labels[i],percentage[i].item()))
+                logger.info("    Classify as {}, confidence {:.2f}".format(self.labels[i], percentage[i].item()))
 
             elapsed_time = time.process_time() - t
             logger.info("Image classify elapsed time: {:.0f} seconds".format(elapsed_time))
 
-        return [[self.labels[i],percentage[i].item()] for i in indices[0][:5]]
+        return [[self.labels[i], percentage[i].item()] for i in indices[0][:5]]
 
     def detect(self, image_path, detection_threshold: float = 0.7, logger=None):
         t = time.process_time()
@@ -160,7 +155,7 @@ class ImageAnalisis:
         pred_score = list(predictions[0]['scores'].detach().numpy())
 
         pred_t = [pred_score.index(x) for x in pred_score if x > detection_threshold]
-        if pred_t == []:
+        if not pred_t:
             if logger:
                 elapsed_time = time.process_time() - t
                 logger.info("Object detection elapsed time: {:.0f} seconds".format(elapsed_time))
@@ -169,37 +164,37 @@ class ImageAnalisis:
 
         pred_t = pred_t[-1]
 
-        pred_class = pred_class[:pred_t+1]
-        pred_boxes = pred_boxes[:pred_t+1]
-        pred_score = pred_score[:pred_t+1]
-        pred_masks = [None for _ in range(pred_t+1)]
-        pred_keypoints = [None for _ in range(pred_t+1)]
+        pred_class = pred_class[:pred_t + 1]
+        pred_boxes = pred_boxes[:pred_t + 1]
+        pred_score = pred_score[:pred_t + 1]
+        pred_masks = [None for _ in range(pred_t + 1)]
+        pred_keypoints = [None for _ in range(pred_t + 1)]
 
         if 'masks' in predictions[0]:
-            pred_masks = (predictions[0]['masks']>0.5).squeeze().detach().cpu().numpy()
-            pred_masks =  pred_masks[:pred_t+1]
+            pred_masks = (predictions[0]['masks'] > 0.5).squeeze().detach().cpu().numpy()
+            pred_masks = pred_masks[:pred_t + 1]
         if 'keypoints' in predictions[0]:
             pred_keypoints_locations = list(predictions[0]['keypoints'].detach().numpy())
-            pred_keypoints_locations = pred_keypoints_locations[:pred_t+1]
+            pred_keypoints_locations = pred_keypoints_locations[:pred_t + 1]
             pred_keypoints_scores = list(predictions[0]['keypoints_scores'].detach().numpy())
-            pred_keypoints_scores = pred_keypoints_scores[:pred_t+1]
-            for i in range(pred_t+1):
+            pred_keypoints_scores = pred_keypoints_scores[:pred_t + 1]
+            for i in range(pred_t + 1):
+                # noinspection PyTypeChecker
                 pred_keypoints[i] = [
                     {
-                        'label': label, 
+                        'label': label,
                         'score': pred_keypoints_scores[i][j],
                         'location': pred_keypoints_locations[i][j][0:2],
                         'visibility': pred_keypoints_locations[i][j][2],
-                    } 
+                    }
                     for j, label in enumerate(self.COCO_PERSON_KEYPOINT_NAMES)
                 ]
-
 
         out = []
         for i in range(len(pred_class)):
             if logger:
                 logger.info("    Detected {}, confidence {:.2f}".format(
-                    pred_class[i], pred_score[i]* 100)
+                    pred_class[i], pred_score[i] * 100)
                 )
             out.append(
                 {
@@ -210,40 +205,22 @@ class ImageAnalisis:
                     'keypoints': pred_keypoints[i],
                 }
             )
-        if logger:     
+        if logger:
             elapsed_time = time.process_time() - t
             logger.info("Object detection elapsed time: {:.0f} seconds".format(elapsed_time))
 
         return out
 
-    def image_analisis(self, image_links, detection_threshold: float = 0.7, logger=None):
-        checked_imgs = False
+    def image_analysis(self, image_links, detection_threshold: float = 0.7, logger=None):
+        checked_images = False
         temp_comments = []
-        image_analisis_tags = []
+        image_analysis_tags = []
 
         try:
             for link in image_links:
                 urllib.request.urlretrieve(link, "temp_img.jpg")
                 self.classify("temp_img.jpg", logger)
                 self.detect("temp_img.jpg", detection_threshold, logger)
-            checked_imgs = True
+            checked_images = True
         finally:
-            return checked_imgs, temp_comments, image_analisis_tags
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            return checked_images, temp_comments, image_analysis_tags

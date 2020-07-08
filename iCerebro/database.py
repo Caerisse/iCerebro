@@ -4,15 +4,17 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, Sequence, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 
+
 class IgDb:
     def __init__(
-        self,
-        db_string='postgres://caerisse@localhost:5432/instagram'
+            self,
+            db_location='postgres://caerisse@localhost:5432/instagram'
     ):
-        engine = create_engine(db_string)
+        engine = create_engine(db_location)
 
-        Session = sessionmaker(engine)
-        self.session = Session()
+        session = sessionmaker(engine)
+        self.session = session()
+
 
 Base = declarative_base()
 
@@ -23,6 +25,7 @@ follow_relations = Table(
     Column('followed_id', Integer, ForeignKey('users.id'), primary_key=True),
     UniqueConstraint('follower_id', 'followed_id', name='unique_follows'),
 )
+
 
 class User(Base):
     __tablename__ = 'users'
@@ -41,6 +44,7 @@ class User(Base):
                              )
     posts = relationship('Post')
     comments = relationship('Comment')
+
 
 class Post(Base):
     __tablename__ = 'posts'
@@ -144,5 +148,3 @@ db.session add
 db.session commit
 
 '''
-
-

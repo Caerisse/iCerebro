@@ -1,7 +1,5 @@
 # Imports
-from natural_flow import MyInstaPy
-#from instapy import InstaPy
-from upload import upload_single_image
+from iCerebro import ICerebro
 import random
 import argparse
 import os
@@ -37,7 +35,7 @@ import config
 
 # get an InstaPy session and login
 # set headless_browser=True to run InstaPy in the background
-session = MyInstaPy(username=insta_username,
+session = ICerebro( username=insta_username,
                     password=insta_password,
                     want_check_browser=False,
                     headless_browser=config.headless_browser,
@@ -95,8 +93,6 @@ session.set_mandatory_language(enabled=True, character_set=['LATIN'])
 # Not unfollow anyone whi interacted with the account
 #session.set_dont_unfollow_active_users(enabled=True, posts=3)
 
-session.set_simulation(enabled=True, percentage=90)
-
 # Skip certains users (In this case will not interact with private accounts 80 percent of the time 
 # and not at all with no profile pics account)
 session.set_skip_users( skip_private=config.skip_private,
@@ -110,7 +106,9 @@ session.set_skip_users( skip_private=config.skip_private,
                         dont_skip_business_categories=config.dont_skip_business_categories  )
 
 # Limit of previous liking in post to allow interact
-session.set_delimit_liking( enabled=True, max_likes=None, min_likes=50 )
+session.set_delimit_liking( enabled=True, max_likes=None, min_likes=5 )
+
+session.set_store_in_database(True)
     
 # ---------------------------------------------------------------------------- #
 #                               Activity Settings                              #
@@ -185,7 +183,7 @@ try:
                     break
 
             #Upload!
-            upload_single_image(post[0], text, args['account'], session)
+            session.nf_upload_single_image(post[0], text, args['account'])
 
             # Remove files related to the uploaded pic
             for file_name in  delete:
@@ -200,6 +198,8 @@ try:
             # TODO: move to config files
             session.join_pods(topic='fashion', engagement_mode='normal')
             session.join_pods(topic='travel', engagement_mode='normal')
+            session.join_pods(topic='general', engagement_mode='normal')
+            session.join_pods(topic='sports', engagement_mode='normal')
 
 
         # ---------------------------------------------------------------------------- #
@@ -215,13 +215,13 @@ try:
                                             sleep_delay=config.accept_follow_requests_sleep_delay)
             
             # Follow some users of given account followers
-            session.follow_user_followers(  random.sample(config.similar_accounts, 
+            session.nf_follow_user_follow(  "followers",
+                                            random.sample(config.similar_accounts, 
                                                 random.randint( config.follow_user_followers_amount_of_accounts,
-                                                                config.follow_user_followers_amount_of_accounts*2   )), 
+                                                                config.follow_user_followers_amount_of_accounts* 2)),
                                             amount=random.randint(  config.follow_user_followers_amount,
                                                                     config.follow_user_followers_amount*2   ), 
-                                            randomize=True, 
-                                            interact=True)
+                                            randomize=True)
                                        
             # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
             session.nf_like_by_tags(random.sample(config.like_tag_list, 
@@ -231,12 +231,12 @@ try:
                                                             config.like_by_tags_amount*2    ),
                                     skip_top_posts=False)
 
-            """
+            
             # Unfollow some users who dont follow back after 3-5 days
             session.unfollow_users( amount=20, instapy_followed_enabled=True, 
                                     instapy_followed_param="nonfollowers", style="RANDOM", 
                                     unfollow_after=random.randint(72, 120)*60*60, sleep_delay=random.randint(403,501))
-            """
+            
         
 except KeyboardInterrupt:
     pass

@@ -27,10 +27,10 @@ unfollow=5
 story=5
 
 # set_relationship_bounds
-max_followers=10000
+max_followers=50000
 min_followers=50
 min_following=10
-min_posts=10 
+min_posts=10
 
 # set_skip_users
 skip_private=True
@@ -49,18 +49,18 @@ do_like_percentage = 80
 do_follow_percentage = 70
 do_follow_times = 2
 do_story_percentage = 50
-user_interact_percentage = 60
+user_interact_percentage = 80
 # Sill chiise a nomber within this and 3 times it
-user_interact_amount = 1
+user_interact_amount = 3
 
 accept_follow_requests_amount = 100
 accept_follow_requests_sleep_delay = 5
 
 # Will actually use a random number between these and its double
-follow_user_followers_amount_of_accounts = 1
-follow_user_followers_amount = 5
+follow_user_followers_amount_of_accounts = 2
+follow_user_followers_amount = 7
 like_by_tags_amount_of_tags = 2
-like_by_tags_amount = 10
+like_by_tags_amount = 15
 
 # Posts sources
 # https://www.instagram.com/the.sunshine.yogi/
