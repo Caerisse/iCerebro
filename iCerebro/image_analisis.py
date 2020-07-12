@@ -91,7 +91,7 @@ class ImageAnalysis:
         ])
 
         # Load Labels
-        with open('imagenet_labels.txt') as f:
+        with open('iCerebro/imagenet_labels.txt') as f:
             self.labels = [line.strip()[10:] for line in f.readlines()]
 
         self.COCO_INSTANCE_CATEGORY_NAMES = [

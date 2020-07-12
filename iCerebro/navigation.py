@@ -125,7 +125,8 @@ def nf_click_center_of_element(
 
 def nf_find_and_press_back(
         self,
-        link: str
+        link: str,
+        try_n: int = 1
 ):
     """Finds and press back button"""
     possibles = [
@@ -157,12 +158,20 @@ def nf_find_and_press_back(
         self.logger.warning("Failed to get back button with all xpaths")
     else:
         self.logger.info("Pressed back button with xpath:\n     {}".format(back_path))
+        sleep(1)
+        bad_loading = self.browser.find_elements_by_xpath(
+            '/html/body/div[1]/section[@class="_9eogI E3X2T"]/span[@class="BHkOG PID-B"]'
+        )
+        if bad_loading and try_n <= 3:
+            try_n += 1
+            nf_find_and_press_back(self, link, try_n)
 
-    sleep(3)
     if not check_if_in_correct_page(self, link):
         self.logger.error("Failed to go back, navigating there")
         # TODO: retry to get there naturally
         web_address_navigator(self.browser, link)
+    else:
+        self.logger.info("and ended in correct page")
 
 
 def nf_go_from_post_to_profile(
@@ -187,7 +196,9 @@ def nf_go_from_post_to_profile(
 
 
 def nf_go_to_follow_page(self, which: str, username: str):
-    # TODO: do it naturally
+    follow_link = "https://www.instagram.com/{}/{}/".format(username, which)
+    if check_if_in_correct_page(self, follow_link):
+        return
     try:
         follow_which_button = self.browser.find_element_by_xpath(
             '//a[@href="/{}/{}/"]'.format(username, which)
@@ -197,7 +208,6 @@ def nf_go_to_follow_page(self, which: str, username: str):
     except NoSuchElementException:
         self.logger.warning("Failed to get {} page button".format(which))
     sleep(2)
-    follow_link = "https://www.instagram.com/{}/{}/".format(username, which)
     if not check_if_in_correct_page(self, follow_link):
         self.logger.error("Failed to go to {} page, navigating there".format(which))
         # TODO: retry to get there naturally

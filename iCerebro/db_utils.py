@@ -1,7 +1,12 @@
 from datetime import datetime
 from time import sleep
 from typing import List
-from instapy.util import web_address_navigator, deform_emojis
+
+from instapy.like_util import get_links_for_username
+from instapy.relationship_tools import get_followers, get_following
+from instapy.util import web_address_navigator, deform_emojis, get_relationship_counts, getUserData
+from selenium.common.exceptions import WebDriverException, NoSuchElementException
+
 from iCerebro.database import Post, Comment, User
 from iCerebro.navigation import nf_scroll_into_view, nf_click_center_of_element, \
     nf_find_and_press_back, check_if_in_correct_page
@@ -119,3 +124,160 @@ def db_get_or_create_post(
     else:
         post = posts[0]
     return post
+
+
+def scrap_for_user_relationships(self, starting_username: str):
+    user_link = "https://www.instagram.com/{}/".format(starting_username)
+    web_address_navigator(self.browser, user_link)
+    followers_count, following_count = get_relationship_counts(self.browser, starting_username, self.logger)
+    try:
+        posts_count = getUserData(
+            "graphql.user.edge_owner_to_timeline_media.count", self.browser
+        )
+    except WebDriverException:
+        posts_count = 0
+
+    starting_user = None
+    try:
+        starting_user = db_get_or_create_user(self, starting_username)
+        self.db.session.add(starting_user)
+        starting_user.date_checked = datetime.now()
+        if starting_user.followers_count != followers_count:
+            starting_user.followers_count = followers_count
+        if starting_user.following_count != following_count:
+            starting_user.following_count = following_count
+        if starting_user.posts_count != posts_count and posts_count != 0:
+            starting_user.posts_count = posts_count
+        self.db.session.commit()
+    except SQLAlchemyError:
+        self.db.session.rollback()
+
+    if starting_user and len(starting_user.followers) != followers_count:
+        followers = get_followers(
+            self.browser,
+            starting_username,
+            "full",
+            self.relationship_data,
+            True,
+            False,
+            self.logger,
+            self.logfolder
+        )
+        for username in followers:
+            try:
+                user = db_get_or_create_user(self, username)
+                self.db.session.add(user)
+                self.db.session.commit()
+            except SQLAlchemyError:
+                self.db.session.rollback()
+
+    if starting_user and len(starting_user.following) != following_count:
+        following = get_following(
+            self.browser,
+            starting_username,
+            "full",
+            self.relationship_data,
+            True,
+            False,
+            self.logger,
+            self.logfolder
+        )
+        for username in following:
+            try:
+                user = db_get_or_create_user(self, username)
+                self.db.session.add(user)
+                self.db.session.commit()
+            except SQLAlchemyError:
+                self.db.session.rollback()
+
+
+def store_all_posts_of_user(self, starting_username: str):
+    user_link = "https://www.instagram.com/{}/".format(starting_username)
+    web_address_navigator(self.browser, user_link)
+    try:
+        posts_count = getUserData(
+            "graphql.user.edge_owner_to_timeline_media.count", self.browser
+        )
+    except WebDriverException:
+        posts_count = 0
+
+    starting_user = None
+    try:
+        starting_user = db_get_or_create_user(self, starting_username)
+        self.db.session.add(starting_user)
+        if starting_user.posts_count != posts_count and posts_count != 0:
+            starting_user.posts_count = posts_count
+        self.db.session.commit()
+    except SQLAlchemyError:
+        self.db.session.rollback()
+
+    if starting_user and len(starting_user.posts) != posts_count:
+        post_links = get_links_for_username(
+            self.browser,
+            self.username,
+            starting_username,
+            1000,
+            self.logger,
+            self.logfolder
+        )
+        for post_link in post_links:
+            web_address_navigator(self.browser, post_link)
+            try:
+                username = self.browser.find_element_by_xpath(
+                    '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
+                )
+                username_text = username.text
+                images = self.browser.find_elements_by_xpath(
+                    '/html/body/div[1]/section/main/div/div/article//img[@class="FFVAD"]'
+                )
+                more_button = self.browser.find_elements_by_xpath("//button[text()='more']")
+                if more_button:
+                    nf_scroll_into_view(self, more_button[0])
+                    more_button[0].click()
+                caption = self.browser.find_element_by_xpath(
+                    "/html/body/div[1]/section/main/div/div/article//div/div/span/span"
+                ).text
+                caption = "" if caption is None else caption
+                image_descriptions = []
+                image_links = []
+                for image in images:
+                    image_description = image.get_attribute('alt')
+                    if image_description is not None and 'Image may contain:' in image_description:
+                        image_description = image_description[image_description.index(
+                            'Image may contain:') + 19:]
+                    else:
+                        image_description = None
+                    image_descriptions.append(image_description)
+                    image_links.append(image.get_attribute('src'))
+
+                user = db_get_or_create_user(self, username_text)
+                self.db.session.add(user)
+                self.db.session.commit()
+                db_posts = []
+                for image_link, image_description in zip(image_links, image_descriptions):
+                    try:
+                        post_date = self.browser.find_element_by_xpath(
+                            '/html/body/div[1]/section/main/div/div/article//a[@class="c-Yi7"]/time'
+                        ).get_attribute('datetime')
+                        post_date = datetime.fromisoformat(post_date[:-1])
+                    except NoSuchElementException:
+                        post_date = datetime.now()
+
+                    post = db_get_or_create_post(
+                        self,
+                        post_date,
+                        image_link,
+                        caption,
+                        user,
+                        image_description
+                    )
+                    self.db.session.add(post)
+                    db_posts.append(post)
+                self.db.session.commit()
+                if db_posts:
+                    self.logger.info("About to store comments")
+                    db_store_comments(self, db_posts, post_link)
+            except SQLAlchemyError:
+                self.db.session.rollback()
+            finally:
+                self.db.session.commit()

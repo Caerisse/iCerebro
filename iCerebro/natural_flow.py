@@ -156,10 +156,13 @@ def like_by_tags(
                         already_interacted_links.append(link)
 
                         if success:
-                            break
+                            # TODO add to quotient
+                            pass
                         if msg == "block on likes":
                             # TODO deal with block on likes
-                            break
+                            pass
+
+                        break
                 else:
                     # For loop ended means all posts in screen has been interacted with
                     # will scroll the screen a bit and reload
@@ -227,10 +230,11 @@ def like_by_users(
         )
         self.logger.info("--> {}".format(username.encode("utf-8")))
 
-        if len(usernames) == 1 and users_validated:
-            nf_go_from_post_to_profile(self, username)
-        else:
-            nf_go_to_user_page(self, username)
+        if not check_if_in_correct_page(self, "https://www.instagram.com/{}/".format(username)):
+            if len(usernames) == 1 and users_validated:
+                nf_go_from_post_to_profile(self, username)
+            else:
+                nf_go_to_user_page(self, username)
 
         if not users_validated:
             validation, details = nf_validate_user_call(self, username)
@@ -378,6 +382,9 @@ def follow_user_follow(
         nf_go_to_user_page(self, username)
         sleep(1)
 
+        user_link = "https://www.instagram.com/{}".format(username)
+        follow_link = "https://www.instagram.com/{}/{}".format(username, follow)
+
         # TODO: get follow count
         follow_count = 10
         actual_amount = amount
@@ -407,29 +414,44 @@ def follow_user_follow(
                     sc_rolled = 0
 
                 users = nf_get_all_users_on_element(self)
+                while len(users) == 0:
+                    nf_find_and_press_back(self, user_link)
+                    in_user_page = check_if_in_correct_page(self, user_link)
+                    if not in_user_page:
+                        nf_go_to_user_page(self, username)
+                    nf_go_to_follow_page(self, follow, username)
+                    users = nf_get_all_users_on_element(self)
+                    if len(users) == 0:
+                        self.logger.info("Soft block on see followers ~ sleeping 5 minutes")
+                        sleep(300)
+                self.logger.info("Grabbed {} usernames".format(len(users)))
 
                 # Interact with links instead of just storing them
-                for user in users:
+                for user in users[1:]:
                     link = user.get_attribute("href")
                     if link not in already_interacted_links:
                         msg = ""
                         try:
+                            user_text = user.text
+                            self.logger.info("Followed [{}/{}]".format(state["followed"], actual_amount))
+                            self.logger.info("--> Trying user {}".format(user_text.encode("utf-8")))
                             self.logger.info("about to scroll to user")
                             sleep(1)
                             nf_scroll_into_view(self, user)
                             self.logger.info("about to click to user")
                             sleep(1)
-                            nf_click_center_of_element(self, user)
+                            # nf_click_center_of_element(self, user)
+                            self.browser.execute_script("arguments[0].click();", user)
                             sleep(2)
                             valid = False
                             if (
-                                    user.text not in self.dont_include
+                                    user_text not in self.dont_include
                                     and not follow_restriction(
-                                        "read", user.text, self.follow_times, self.logger
-                                    and random.randint(0, 100) <= random_chance
+                                        "read", user_text, self.follow_times, self.logger
                                     )
+                                    and random.randint(0, 100) <= random_chance
                             ):
-                                valid, details = nf_validate_user_call(self, user.text)
+                                valid, details = nf_validate_user_call(self, user_text)
                                 self.logger.info("Valid User: {}, details: {}".format(valid, details))
                             if valid:
                                 self.logger.info("about to follow user")
@@ -437,7 +459,7 @@ def follow_user_follow(
                                     self.browser,
                                     "profile",
                                     self.username,
-                                    user.text,
+                                    user_text,
                                     None,
                                     self.blacklist,
                                     self.logger,
@@ -452,27 +474,30 @@ def follow_user_follow(
                                 if random.randint(0, 100) <= self.user_interact_percentage:
                                     self.logger.info(
                                         "--> User gonna be interacted: '{}'".format(
-                                            user.text
+                                            user_text
                                         )
                                     )
-                                # disable re-validating user in like_by_users
-                                like_by_users(
-                                    self,
-                                    [user.text],
-                                    None,
-                                    True,
-                                )
+                                    # disable re-validating user in like_by_users
+                                    like_by_users(
+                                        self,
+                                        [user_text],
+                                        None,
+                                        True,
+                                    )
                             else:
                                 state["not_valid_users"] += 1
-
+                        except Exception as e:
+                            self.logger.error(e)
                         finally:
                             sleep(5)
-                            user_link = "https://www.instagram.com/{}".format(username)
-                            follow_link = "https://www.instagram.com/{}/{}".format(username, follow)
                             nf_find_and_press_back(self, follow_link)
-                            sleep(3)
-                            if check_if_in_correct_page(self, user_link):
+                            in_follow_page = check_if_in_correct_page(self, follow_link)
+                            if not in_follow_page:
+                                in_user_page = check_if_in_correct_page(self, user_link)
+                                if not in_user_page:
+                                    nf_go_to_user_page(self, username)
                                 nf_go_to_follow_page(self, follow, username)
+
                             already_interacted_links.append(link)
                             if msg == "block on follow":
                                 pass  # TODO deal with block on follow

@@ -1,7 +1,9 @@
+from time import sleep
 from typing import List
 
 from instapy import InstaPy
-from iCerebro.database import IgDb
+from iCerebro.database import IgDb, User
+from iCerebro.db_utils import scrap_for_user_relationships, store_all_posts_of_user
 from iCerebro.image_analisis import ImageAnalysis
 from iCerebro.natural_flow import like_by_tags, follow_user_follow, like_by_users
 from iCerebro.upload import upload_single_image
@@ -73,3 +75,13 @@ class ICerebro(InstaPy):
 
     def nf_upload_single_image(self, image_name: str, text: str, insta_username: str):
         upload_single_image(self, image_name, text, insta_username)
+
+    def complete_user_relationships_of_users_already_in_db(self):
+        for user in self.db.session.query(User).yield_per(100).enable_eagerloads(False):
+            scrap_for_user_relationships(self, user.username)
+            sleep(15)
+
+    def complete_posts_of_users_already_in_db(self):
+        for user in self.db.session.query(User).yield_per(100).enable_eagerloads(False):
+            store_all_posts_of_user(self, user.username)
+            sleep(15)

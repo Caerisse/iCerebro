@@ -72,7 +72,7 @@ def nf_check_post(
             more_button[0].click()
 
         caption = self.browser.find_element_by_xpath(
-            "/html/body/div[1]/section/main/div/div/article//div[2]/div[1]//div/span/span"
+            "/html/body/div[1]/section/main/div/div/article//div/div/span/span"
         ).text
         caption = "" if caption is None else caption
 
@@ -278,8 +278,6 @@ def nf_validate_user_call(
     try:
         if post_link:
             nf_go_from_post_to_profile(self, username)
-        else:
-            post_link = get_current_url(self.browser)
         self.logger.info("about to start checking user page")
         # Checks the potential of target user by relationship status in order
         # to delimit actions within the desired boundary
