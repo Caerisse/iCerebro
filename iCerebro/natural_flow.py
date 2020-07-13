@@ -1,10 +1,11 @@
 import random
+from platform import python_version
 from typing import List
 
-from instapy.util import update_activity, format_number
+from instapy.util import update_activity, format_number, highlight_print
 from instapy.like_util import like_image, verify_liking
 from instapy.xpath import read_xpath
-from instapy.unfollow_util import follow_restriction, follow_user
+from instapy.unfollow_util import follow_restriction, follow_user, set_automated_followed_pool
 from instapy.time_util import sleep
 
 from selenium.common.exceptions import WebDriverException
@@ -14,7 +15,7 @@ from iCerebro.navigation import nf_go_to_tag_page, nf_scroll_into_view, nf_click
     nf_find_and_press_back, nf_go_from_post_to_profile, nf_go_to_user_page, nf_go_to_follow_page, \
     check_if_in_correct_page
 from iCerebro.utils import nf_check_post, nf_get_all_posts_on_element, nf_validate_user_call, process_comments, \
-    nf_get_all_users_on_element
+    nf_get_all_users_on_element, unfollow
 
 
 def like_by_tags(
@@ -711,3 +712,70 @@ def nf_interact_with_post(
     except NoSuchElementException as err:
         self.logger.error("Invalid Page: {}".format(err))
         return False, "Invalid Page", state
+
+
+def unfollow_users(
+        self,
+        amount: int = 10,
+        custom_list_enabled: bool = False,
+        custom_list: list = [],
+        custom_list_param: str = "all",
+        instapy_followed_enabled: bool = False,
+        instapy_followed_param: str = "all",
+        nonFollowers: bool = False,
+        allFollowing: bool = False,
+        style: str = "FIFO",
+        unfollow_after: int = None,
+        delay_followbackers: int = 0,  # 864000 = 10 days, 0 = don't delay
+        sleep_delay: int = 600,
+):
+    """Unfollows (default) 10 users from your following list"""
+
+    if self.aborting:
+        return self
+
+    message = "Starting to unfollow users.."
+    highlight_print(self.username, message, "feature", "info", self.logger)
+
+    if unfollow_after is not None:
+        if not python_version().startswith(("2.7", "3")):
+            self.logger.warning(
+                "`unfollow_after` parameter is not"
+                " available for Python versions below 2.7"
+            )
+            unfollow_after = None
+
+    self.automatedFollowedPool = set_automated_followed_pool(
+        self.username,
+        unfollow_after,
+        self.logger,
+        self.logfolder,
+        delay_followbackers,
+    )
+
+    try:
+        unfollowed = unfollow(
+            self,
+            amount,
+            (custom_list_enabled, custom_list, custom_list_param),
+            (instapy_followed_enabled, instapy_followed_param),
+            nonFollowers,
+            allFollowing,
+            style,
+            sleep_delay,
+            delay_followbackers,
+        )
+        self.logger.info("--> Total people unfollowed : {}\n".format(unfollowed))
+        self.unfollowed += unfollowed
+
+    except Exception as exc:
+        if isinstance(exc, RuntimeWarning):
+            self.logger.warning("Warning: {} , stopping unfollow_users".format(exc))
+            return self
+
+        else:
+            self.logger.error("Sorry, an error occurred: {}".format(exc))
+            self.aborting = True
+            return self
+
+    return self

@@ -4,17 +4,25 @@ import re
 import time
 from datetime import datetime
 import random
+from math import ceil
 from typing import List, Tuple
 
 from instapy.comment_util import verify_commenting, comment_image
-from instapy.util import get_current_url, get_relationship_counts, truncate_float, getUserData, \
-    default_profile_pic_instagram
+from instapy.event import Event
+from instapy.quota_supervisor import quota_supervisor
+from instapy.relationship_tools import get_nonfollowers, get_followers, get_following
+from instapy.unfollow_util import set_followback_in_pool, get_following_status, confirm_unfollow, \
+    verify_action, post_unfollow_cleanup
+from instapy.util import get_relationship_counts, truncate_float, getUserData, \
+    default_profile_pic_instagram, is_page_available, is_follow_me, get_epoch_time_diff, delete_line_from_file, \
+    click_element, update_activity, get_action_delay, emergency_exit
 from selenium.common.exceptions import WebDriverException, NoSuchElementException
 from selenium.webdriver.remote.webelement import WebElement
 from sqlalchemy.exc import SQLAlchemyError
 
 from iCerebro.db_utils import db_get_or_create_user, db_get_or_create_post, db_store_comments
-from iCerebro.navigation import nf_scroll_into_view, nf_go_from_post_to_profile, nf_find_and_press_back
+from iCerebro.navigation import nf_scroll_into_view, nf_go_from_post_to_profile, nf_find_and_press_back, \
+    nf_go_to_user_page, check_if_in_correct_page
 
 
 def nf_check_post(
@@ -592,3 +600,469 @@ def nf_get_all_users_on_element(
 ) -> List[WebElement]:
     # return element.find_elements_by_xpath('//li/div/div[1]/div[2]/div[1]/a')
     return self.browser.find_elements_by_xpath('//a[@class="FPmhX notranslate  _0imsa "]')
+
+
+# noinspection PyPep8Naming
+# noinspection PyUnboundLocalVariable
+def unfollow(
+        self,
+        amount,
+        customList,
+        InstapyFollowed,
+        nonFollowers,
+        allFollowing,
+        style,
+        sleep_delay,
+        delay_followbackers,
+):
+    """ Unfollow the given amount of users"""
+
+    if (
+            customList is not None
+            and isinstance(customList, (tuple, list))
+            and len(customList) == 3
+            and customList[0] is True
+            and isinstance(customList[1], (list, tuple, set))
+            and len(customList[1]) > 0
+            and customList[2] in ["all", "nonfollowers"]
+    ):
+        customList_data = customList[1]
+        if not isinstance(customList_data, list):
+            customList_data = list(customList_data)
+        unfollow_track = customList[2]
+        customList = True
+    else:
+        customList = False
+
+    if (
+            InstapyFollowed is not None
+            and isinstance(InstapyFollowed, (tuple, list))
+            and len(InstapyFollowed) == 2
+            and InstapyFollowed[0] is True
+            and InstapyFollowed[1] in ["all", "nonfollowers"]
+    ):
+        unfollow_track = InstapyFollowed[1]
+        InstapyFollowed = True
+    else:
+        InstapyFollowed = False
+
+    unfollowNum = 0
+
+    # TODO: change to click self user icon
+    nf_go_to_user_page(self, self.username)
+
+    # check how many people we are following
+    _, allfollowing = get_relationship_counts(self.browser, self.username, self.logger)
+
+    if allfollowing is None:
+        self.logger.warning(
+            "Unable to find the count of users followed  ~leaving unfollow " "feature"
+        )
+        return 0
+    elif allfollowing == 0:
+        self.logger.warning("There are 0 people to unfollow  ~leaving unfollow feature")
+        return 0
+
+    if amount > allfollowing:
+        self.logger.info(
+            "There are less users to unfollow than you have requested:  "
+            "{}/{}  ~using available amount\n".format(allfollowing, amount)
+        )
+        amount = allfollowing
+
+    if (
+            customList is True
+            or InstapyFollowed is True
+            or nonFollowers is True
+            or allFollowing is True
+    ):
+
+        if nonFollowers is True:
+            InstapyFollowed = False
+
+        if customList is True:
+            self.logger.info("Unfollowing from the list of pre-defined usernames\n")
+            unfollow_list = customList_data
+
+        elif InstapyFollowed is True:
+            self.logger.info("Unfollowing the users followed by InstaPy\n")
+            unfollow_list = list(self.automatedFollowedPool["eligible"].keys())
+
+        elif nonFollowers is True:
+            self.logger.info("Unfollowing the users who do not follow back\n")
+
+            # Unfollow only the users who do not follow you back
+            unfollow_list = get_nonfollowers(
+                self.browser, self.username, self.relationship_data, False, True, self.logger, self.logfolder
+            )
+
+        # pick only the users in the right track- ["all" or "nonfollowers"]
+        # for `customList` and
+        #  `InstapyFollowed` unfollow methods
+        if customList is True or InstapyFollowed is True:
+            if unfollow_track == "nonfollowers":
+                all_followers = get_followers(
+                    self.browser,
+                    self.username,
+                    "full",
+                    self.relationship_data,
+                    False,
+                    True,
+                    self.logger,
+                    self.logfolder,
+                )
+                loyal_users = [user for user in unfollow_list if user in all_followers]
+                self.logger.info(
+                    "Found {} loyal followers!  ~will not unfollow "
+                    "them".format(len(loyal_users))
+                )
+                unfollow_list = [
+                    user for user in unfollow_list if user not in loyal_users
+                ]
+
+            elif unfollow_track != "all":
+                self.logger.info(
+                    'Unfollow track is not specified! ~choose "all" or '
+                    '"nonfollowers"'
+                )
+                return 0
+
+        # re-generate unfollow list according to the `unfollow_after`
+        # parameter for `customList` and
+        #  `nonFollowers` unfollow methods
+        if customList is True or nonFollowers is True:
+            not_found = []
+            non_eligible = []
+            for person in unfollow_list:
+                if person not in self.automatedFollowedPool["all"].keys():
+                    not_found.append(person)
+                elif (
+                        person in self.automatedFollowedPool["all"].keys()
+                        and person not in self.automatedFollowedPool["eligible"].keys()
+                ):
+                    non_eligible.append(person)
+
+            unfollow_list = [user for user in unfollow_list if user not in non_eligible]
+            self.logger.info(
+                "Total {} users available to unfollow"
+                "  ~not found in 'followedPool.csv': {}  |  didn't "
+                "pass `unfollow_after`: {}\n".format(
+                    len(unfollow_list), len(not_found), len(non_eligible)
+                )
+            )
+
+        elif InstapyFollowed is True:
+            non_eligible = [
+                user
+                for user in self.automatedFollowedPool["all"].keys()
+                if user not in self.automatedFollowedPool["eligible"].keys()
+            ]
+            self.logger.info(
+                "Total {} users available to unfollow  ~didn't pass "
+                "`unfollow_after`: {}\n".format(len(unfollow_list), len(non_eligible))
+            )
+        elif allFollowing is True:
+            self.logger.info("Unfollowing the users you are following")
+            unfollow_list = get_following(
+                self.browser,
+                self.username,
+                "full",
+                self.relationship_data,
+                False,
+                True,
+                self.logger,
+                self.logfolder,
+            )
+
+        if len(unfollow_list) < 1:
+            self.logger.info("There are no any users available to unfollow")
+            return 0
+
+        # choose the desired order of the elements
+        if style == "LIFO":
+            unfollow_list = list(reversed(unfollow_list))
+        elif style == "RANDOM":
+            random.shuffle(unfollow_list)
+
+        if amount > len(unfollow_list):
+            self.logger.info(
+                "You have requested more amount: {} than {} of users "
+                "available to unfollow"
+                "~using available amount\n".format(amount, len(unfollow_list))
+            )
+            amount = len(unfollow_list)
+
+        # unfollow loop
+        try:
+            sleep_counter = 0
+            sleep_after = random.randint(8, 12)
+            index = 0
+
+            for person in unfollow_list:
+                if unfollowNum >= amount:
+                    self.logger.warning(
+                        "--> Total unfollows reached it's amount given {}\n".format(
+                            unfollowNum
+                        )
+                    )
+                    break
+
+                if self.jumps["consequent"]["unfollows"] >= self.jumps["limit"]["unfollows"]:
+                    self.logger.warning(
+                        "--> Unfollow quotient reached its peak!\t~leaving "
+                        "Unfollow-Users activity\n"
+                    )
+                    break
+
+                if sleep_counter >= sleep_after and sleep_delay not in [0, None]:
+                    delay_random = random.randint(
+                        ceil(sleep_delay * 0.85), ceil(sleep_delay * 1.14)
+                    )
+                    self.logger.info(
+                        "Unfollowed {} new users  ~sleeping about {}\n".format(
+                            sleep_counter,
+                            "{} seconds".format(delay_random)
+                            if delay_random < 60
+                            else "{} minutes".format(
+                                truncate_float(delay_random / 60, 2)
+                            ),
+                        )
+                    )
+                    time.sleep(delay_random)
+                    sleep_counter = 0
+                    sleep_after = random.randint(8, 12)
+                    pass
+
+                if person not in self.dont_include:
+                    self.logger.info(
+                        "Ongoing Unfollow [{}/{}]: now unfollowing '{}'...".format(
+                            unfollowNum + 1, amount, person.encode("utf-8")
+                        )
+                    )
+
+                    person_id = (
+                        self.automatedFollowedPool["all"][person]["id"]
+                        if person in self.automatedFollowedPool["all"].keys()
+                        else False
+                    )
+
+                    # delay unfollowing of follow-backers
+                    if delay_followbackers and unfollow_track != "nonfollowers":
+
+                        followedback_status = self.automatedFollowedPool["all"][person][
+                            "followedback"
+                        ]
+                        # if once before we set that flag to true
+                        # now it is time to unfollow since
+                        # time filter pass, user is now eligible to unfollow
+                        if followedback_status is not True:
+                            nf_go_to_user_page(self, person)
+                            valid_page = is_page_available(self.browser, self.logger)
+
+                            if valid_page and is_follow_me(self.browser, person):
+                                # delay follow-backers with delay_follow_back.
+                                time_stamp = (
+                                    self.automatedFollowedPool["all"][person]["time_stamp"]
+                                    if person in self.automatedFollowedPool["all"].keys()
+                                    else False
+                                )
+                                if time_stamp not in [False, None]:
+                                    try:
+                                        time_diff = get_epoch_time_diff(
+                                            time_stamp, self.logger
+                                        )
+                                        if time_diff is None:
+                                            continue
+
+                                        if (
+                                                time_diff < delay_followbackers
+                                        ):  # N days in seconds
+                                            set_followback_in_pool(
+                                                self.username,
+                                                person,
+                                                person_id,
+                                                time_stamp,  # stay with original timestamp
+                                                self.logger,
+                                                self.logfolder,
+                                            )
+                                            # don't unfollow (for now) this follow backer !
+                                            continue
+
+                                    except ValueError:
+                                        self.logger.error(
+                                            "time_diff reading for user {} failed \n".format(
+                                                person
+                                            )
+                                        )
+                                        pass
+
+                    try:
+                        unfollow_state, msg = unfollow_user(
+                            self,
+                            "profile",
+                            person,
+                            person_id,
+                            None,
+                        )
+                    except BaseException as e:
+                        self.logger.error("Unfollow loop error:  {}\n".format(str(e)))
+
+                    if unfollow_state is True:
+                        unfollowNum += 1
+                        sleep_counter += 1
+                        # reset jump counter after a successful unfollow
+                        self.jumps["consequent"]["unfollows"] = 0
+
+                    elif msg == "jumped":
+                        # will break the loop after certain consecutive jumps
+                        self.jumps["consequent"]["unfollows"] += 1
+
+                    elif msg in ["temporary block", "not connected", "not logged in"]:
+                        # break the loop in extreme conditions to prevent
+                        # misbehaviour
+                        self.logger.warning(
+                            "There is a serious issue: '{}'!\t~leaving "
+                            "Unfollow-Users activity".format(msg)
+                        )
+                        break
+
+                else:
+                    # if the user in dont include (should not be) we shall
+                    # remove him from the follow list
+                    # if he is a white list user (set at init and not during
+                    # run time)
+                    if person in self.white_list:
+                        delete_line_from_file(
+                            "{0}{1}_followedPool.csv".format(self.logfolder, self.username),
+                            person,
+                            self.logger,
+                        )
+                        list_type = "whitelist"
+                    else:
+                        list_type = "dont_include"
+                    self.logger.info(
+                        "Not unfollowed '{}'!\t~user is in the list {}"
+                        "\n".format(person, list_type)
+                    )
+                    index += 1
+                    continue
+        except BaseException as e:
+            self.logger.error("Unfollow loop error:  {}\n".format(str(e)))
+    else:
+        self.logger.info(
+            "Please select a proper unfollow method!  ~leaving unfollow " "activity\n"
+        )
+
+    return unfollowNum
+
+
+def unfollow_user(
+        self,
+        track,
+        person,
+        person_id,
+        button,
+):
+    """ Unfollow a user either from the profile or post page or dialog box """
+    # list of available tracks to unfollow in: ["profile", "post" "dialog]
+    # check action availability
+    if quota_supervisor("unfollows") == "jump":
+        return False, "jumped"
+
+    if track in ["profile", "post"]:
+        # Method of unfollowing from a user's profile page or post page
+        if track == "profile":
+            user_link = "https://www.instagram.com/{}/".format(person)
+            if not check_if_in_correct_page(self, user_link):
+                nf_go_to_user_page(self, person)
+
+        # find out CURRENT follow status
+        following_status, follow_button = get_following_status(
+            self.browser, track, self.username, person, person_id, self.logger, self.logfolder
+        )
+
+        if following_status in ["Following", "Requested"]:
+            click_element(self.browser, follow_button)
+            time.sleep(3)
+            confirm_unfollow(self.browser)
+            unfollow_state, msg = verify_action(
+                self.browser,
+                "unfollow",
+                track,
+                self.username,
+                person,
+                person_id,
+                self.logger,
+                self.logfolder,
+            )
+            if unfollow_state is not True:
+                return False, msg
+
+        elif following_status in ["Follow", "Follow Back"]:
+            self.logger.info(
+                "--> Already unfollowed '{}'! or a private user that "
+                "rejected your req".format(person)
+            )
+            post_unfollow_cleanup(
+                ["successful", "uncertain"],
+                self.username,
+                person,
+                self.relationship_data,
+                person_id,
+                self.logger,
+                self.logfolder,
+            )
+            return False, "already unfollowed"
+
+        elif following_status in ["Unblock", "UNAVAILABLE"]:
+            if following_status == "Unblock":
+                failure_msg = "user is in block"
+            else:
+                failure_msg = "user is inaccessible"
+
+            self.logger.warning(
+                "--> Couldn't unfollow '{}'!\t~{}".format(person, failure_msg)
+            )
+            post_unfollow_cleanup(
+                "uncertain",
+                self.username,
+                person,
+                self.relationship_data,
+                person_id,
+                self.logger,
+                self.logfolder,
+            )
+            return False, following_status
+
+        elif following_status is None:
+            sirens_wailing, emergency_state = emergency_exit(self.browser, self.username, self.logger)
+            if sirens_wailing is True:
+                return False, emergency_state
+
+            else:
+                self.logger.warning(
+                    "--> Couldn't unfollow '{}'!\t~unexpected failure".format(person)
+                )
+                return False, "unexpected failure"
+    elif track == "dialog":
+        # Method of unfollowing from a dialog box
+
+        click_element(self.browser, button)
+        time.sleep(4)
+        confirm_unfollow(self.browser)
+
+    # general tasks after a successful unfollow
+    self.logger.info("--> Unfollowed '{}'!".format(person))
+    Event().unfollowed(person)
+    update_activity(
+        self.browser, action="unfollows", state=None, logfolder=self.logfolder, logger=self.logger
+    )
+    post_unfollow_cleanup(
+        "successful", self.username, person, self.relationship_data, person_id, self.logger, self.logfolder
+    )
+
+    # get the post-unfollow delay time to sleep
+    naply = get_action_delay("unfollow")
+    time.sleep(naply)
+
+    return True, "success"

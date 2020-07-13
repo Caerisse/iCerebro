@@ -5,6 +5,7 @@ from typing import List
 from instapy.like_util import get_links_for_username
 from instapy.relationship_tools import get_followers, get_following
 from instapy.util import web_address_navigator, deform_emojis, get_relationship_counts, getUserData
+from progressbar import progressbar
 from selenium.common.exceptions import WebDriverException, NoSuchElementException
 
 from iCerebro.database import Post, Comment, User
@@ -16,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 def db_store_comments(
         self,
         posts: List[Post],
-        post_link: str
+        post_link: str,
 ):
     """Stores all comments of open post then goes back to post page"""
     try:
@@ -163,7 +164,9 @@ def scrap_for_user_relationships(self, starting_username: str):
             self.logger,
             self.logfolder
         )
-        for username in followers:
+        # TODO: remove relationships no longer in place
+        self.logger.info("Saving followers data of {}".format(starting_username))
+        for username in progressbar(followers):
             try:
                 user = db_get_or_create_user(self, username)
                 self.db.session.add(user)
@@ -182,7 +185,8 @@ def scrap_for_user_relationships(self, starting_username: str):
             self.logger,
             self.logfolder
         )
-        for username in following:
+        self.logger.info("Saving following data of {}".format(starting_username))
+        for username in progressbar(following):
             try:
                 user = db_get_or_create_user(self, username)
                 self.db.session.add(user)
@@ -220,7 +224,8 @@ def store_all_posts_of_user(self, starting_username: str):
             self.logger,
             self.logfolder
         )
-        for post_link in post_links:
+        self.logger.info("Saving post data of {}".format(starting_username))
+        for post_link in progressbar(post_links):
             web_address_navigator(self.browser, post_link)
             try:
                 username = self.browser.find_element_by_xpath(
