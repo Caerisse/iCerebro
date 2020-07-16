@@ -560,16 +560,8 @@ def nf_interact_with_post(
 ):
     try:
         self.logger.info("about to check post")
-        sleep(1)
         inappropriate, user_name, is_video, image_links, reason, scope = nf_check_post(self, link)
-        self.logger.info("about to verify post")
-        sleep(1)
-        if not inappropriate and self.delimit_liking:
-            self.liking_approved = verify_liking(
-                self.browser, self.max_likes, self.min_likes, self.logger
-            )
-
-        if not inappropriate and self.liking_approved:
+        if not inappropriate:
             # validate user
             self.logger.info("about to validate user")
             sleep(1)
@@ -704,7 +696,7 @@ def nf_interact_with_post(
 
         else:
             self.logger.info(
-                "--> Image not liked: {}".format(reason.encode("utf-8"))
+                "--> Image not liked: {}\n{}".format(reason.encode("utf-8"), scope.encode("utf-8"))
             )
             state["inap_img"] += 1
             return True, "inap_img", state

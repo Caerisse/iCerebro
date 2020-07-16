@@ -3,6 +3,7 @@ from typing import List
 
 from instapy import InstaPy
 from selenium.common.exceptions import ElementClickInterceptedException
+from sqlalchemy import func
 
 from iCerebro.database import IgDb, User
 from iCerebro.db_utils import scrap_for_user_relationships, store_all_posts_of_user
@@ -110,12 +111,12 @@ class ICerebro(InstaPy):
         )
 
     def complete_user_relationships_of_users_already_in_db(self):
-        for user in self.db.session.query(User).yield_per(100).enable_eagerloads(False):
+        for user in self.db.session.query(User).yield_per(100).enable_eagerloads(False).order_by(func.random()):
             scrap_for_user_relationships(self, user.username)
             sleep(30)
 
     def complete_posts_of_users_already_in_db(self):
-        for user in self.db.session.query(User).yield_per(100).enable_eagerloads(False):
+        for user in self.db.session.query(User).yield_per(100).enable_eagerloads(False).order_by(func.random()):
             try:
                 store_all_posts_of_user(self, user.username)
             except ElementClickInterceptedException:

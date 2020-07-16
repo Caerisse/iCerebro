@@ -4,7 +4,8 @@ from typing import List
 
 from instapy.like_util import get_links_for_username
 from instapy.relationship_tools import get_followers, get_following
-from instapy.util import web_address_navigator, deform_emojis, get_relationship_counts, getUserData
+from instapy.util import web_address_navigator, deform_emojis, get_relationship_counts, getUserData, update_activity, \
+    format_number
 from progressbar import progressbar
 from selenium.common.exceptions import WebDriverException, NoSuchElementException
 
@@ -101,8 +102,10 @@ def db_get_or_create_user(
 def db_get_or_create_post(
         self,
         post_date: datetime,
+        post_link: str,
         src_link: str,
         caption: str,
+        likes: int,
         user: str,
         ig_desciption: str = None,
         objects_detected: str = None,
@@ -115,8 +118,10 @@ def db_get_or_create_post(
     if not posts:
         post = Post(
             date_posted=post_date,
+            link=post_link,
             src=src_link,
             caption=caption,
+            likes=likes,
             user=user,
             ig_desciption=ig_desciption,
             objects_detected=objects_detected,
@@ -195,8 +200,8 @@ def scrap_for_user_relationships(self, starting_username: str):
                 self.db.session.rollback()
 
 
-def store_all_posts_of_user(self, starting_username: str):
-    user_link = "https://www.instagram.com/{}/".format(starting_username)
+def store_all_posts_of_user(self, username: str):
+    user_link = "https://www.instagram.com/{}/".format(username)
     web_address_navigator(self.browser, user_link)
     try:
         posts_count = getUserData(
@@ -205,26 +210,29 @@ def store_all_posts_of_user(self, starting_username: str):
     except WebDriverException:
         posts_count = 0
 
-    starting_user = None
+    user = None
     try:
-        starting_user = db_get_or_create_user(self, starting_username)
-        self.db.session.add(starting_user)
-        if starting_user.posts_count != posts_count and posts_count != 0:
-            starting_user.posts_count = posts_count
+        user = db_get_or_create_user(self, username)
+        self.db.session.add(user)
+        if user.posts_count != posts_count and posts_count != 0:
+            user.posts_count = posts_count
         self.db.session.commit()
     except SQLAlchemyError:
         self.db.session.rollback()
 
-    if starting_user and len(starting_user.posts) != posts_count:
+    if user and len(user.posts) != posts_count:
         post_links = get_links_for_username(
             self.browser,
             self.username,
-            starting_username,
+            username,
             1000,
             self.logger,
             self.logfolder
         )
-        self.logger.info("Saving post data of {}".format(starting_username))
+        self.logger.info("Saving post data of {}".format(username))
+        already_saved_posts = self.db.session.query(Post).filter(Post.user == user).all()
+        post_links = list(set(post_links) - set([post.link for post in already_saved_posts]))
+        already_saved_post_srcs = [post.src for post in already_saved_posts]
         for post_link in progressbar(post_links):
             web_address_navigator(self.browser, post_link)
             try:
@@ -243,6 +251,7 @@ def store_all_posts_of_user(self, starting_username: str):
                     "/html/body/div[1]/section/main/div/div/article//div/div/span/span"
                 ).text
                 caption = "" if caption is None else caption
+                likes_count = get_like_count(self)
                 image_descriptions = []
                 image_links = []
                 for image in images:
@@ -271,13 +280,19 @@ def store_all_posts_of_user(self, starting_username: str):
                     post = db_get_or_create_post(
                         self,
                         post_date,
+                        post_link,
                         image_link,
                         caption,
+                        likes_count,
                         user,
                         image_description
                     )
                     self.db.session.add(post)
-                    db_posts.append(post)
+                    # forgot to save post link on database so this is an extra check to not store
+                    # comments again if post was already saved
+                    # TODO: delete
+                    if image_link not in already_saved_post_srcs:
+                        db_posts.append(post)
                 self.db.session.commit()
                 if db_posts:
                     self.logger.info("About to store comments")
@@ -286,3 +301,41 @@ def store_all_posts_of_user(self, starting_username: str):
                 self.db.session.rollback()
             finally:
                 self.db.session.commit()
+
+
+def get_like_count(
+        self,
+) -> int:
+    try:
+        likes_count = self.browser.execute_script(
+            "return window.__additionalData[Object.keys(window.__additionalData)[0]].data"
+            ".graphql.shortcode_media.edge_media_preview_like.count"
+        )
+        return likes_count
+    except WebDriverException:
+        try:
+            self.browser.execute_script("location.reload()")
+            update_activity(self.browser, state=None)
+
+            likes_count = self.browser.execute_script(
+                "return window._sharedData.entry_data."
+                "PostPage[0].graphql.shortcode_media.edge_media_preview_like"
+                ".count"
+            )
+            return likes_count
+
+        except WebDriverException:
+            try:
+                likes_count = self.browser.find_element_by_css_selector(
+                    "section._1w76c._nlmjy > div > a > span"
+                ).text
+
+                if likes_count:
+                    return format_number(likes_count)
+                else:
+                    self.logger.info("Failed to check likes' count  ~empty string\n")
+                    return -1
+
+            except NoSuchElementException:
+                self.logger.info("Failed to check likes' count\n")
+                return -1

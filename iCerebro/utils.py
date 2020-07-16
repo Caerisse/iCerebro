@@ -15,11 +15,12 @@ from instapy.unfollow_util import set_followback_in_pool, get_following_status, 
     verify_action, post_unfollow_cleanup
 from instapy.util import get_relationship_counts, truncate_float, getUserData, \
     default_profile_pic_instagram, is_page_available, is_follow_me, get_epoch_time_diff, delete_line_from_file, \
-    click_element, update_activity, get_action_delay, emergency_exit
+    click_element, update_activity, get_action_delay, emergency_exit, format_number
 from selenium.common.exceptions import WebDriverException, NoSuchElementException
 from selenium.webdriver.remote.webelement import WebElement
 from sqlalchemy.exc import SQLAlchemyError
 
+from iCerebro.database import Post
 from iCerebro.db_utils import db_get_or_create_user, db_get_or_create_post, db_store_comments
 from iCerebro.navigation import nf_scroll_into_view, nf_go_from_post_to_profile, nf_find_and_press_back, \
     nf_go_to_user_page, check_if_in_correct_page
@@ -40,6 +41,7 @@ def nf_check_post(
     caption = ""
     image_descriptions = []
     image_links = []
+    likes_count = None
     try:
         username = self.browser.find_element_by_xpath(
             '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
@@ -101,6 +103,37 @@ def nf_check_post(
         for image_description in image_descriptions:
             if image_description:
                 self.logger.info("Description: {}".format(image_description.encode("utf-8")))
+
+        # Check if likes_count is between minimum and maximum values defined by user
+        if self.delimit_liking:
+            likes_count = get_like_count(self)
+            if likes_count is None:
+                return (
+                    True,
+                    username_text,
+                    is_video,
+                    image_links,
+                    "Couldn't get like count",
+                    ""
+                )
+            elif self.max_likes is not None and likes_count > self.max_likes:
+                return (
+                    True,
+                    username_text,
+                    is_video,
+                    image_links,
+                    "Delimited by liking",
+                    "maximum limit: {}, post has: {}".format(self.max_likes, likes_count)
+                )
+            elif self.min_likes is not None and likes_count < self.min_likes:
+                return (
+                    True,
+                    username_text,
+                    is_video,
+                    image_links,
+                    "Delimited by liking",
+                    "minimum limit: {}, post has: {}".format(self.min_likes, likes_count)
+                )
 
         # Check if mandatory character set, before adding the location to the text
         if self.mandatory_language:
@@ -180,6 +213,9 @@ def nf_check_post(
         if self.store_in_database:
             try:
                 user = db_get_or_create_user(self, username_text)
+                already_saved_posts = self.db.session.query(Post).filter(Post.user == user).all()
+                if post_link in [post.link for post in already_saved_posts]:
+                    raise SQLAlchemyError
                 self.db.session.add(user)
                 self.db.session.commit()
                 db_posts = []
@@ -191,12 +227,13 @@ def nf_check_post(
                         post_date = datetime.fromisoformat(post_date[:-1])
                     except NoSuchElementException:
                         post_date = datetime.now()
-
                     post = db_get_or_create_post(
                         self,
                         post_date,
+                        post_link,
                         image_link,
                         caption,
+                        likes_count,
                         user,
                         image_description
                     )
@@ -213,6 +250,44 @@ def nf_check_post(
 
         elapsed_time = time.perf_counter() - t
         self.logger.info("check post elapsed time: {:.0f} seconds".format(elapsed_time))
+
+
+def get_like_count(
+        self,
+) -> int:
+    try:
+        likes_count = self.browser.execute_script(
+            "return window.__additionalData[Object.keys(window.__additionalData)[0]].data"
+            ".graphql.shortcode_media.edge_media_preview_like.count"
+        )
+        return likes_count
+    except WebDriverException:
+        try:
+            self.browser.execute_script("location.reload()")
+            update_activity(self.browser, state=None)
+
+            likes_count = self.browser.execute_script(
+                "return window._sharedData.entry_data."
+                "PostPage[0].graphql.shortcode_media.edge_media_preview_like"
+                ".count"
+            )
+            return likes_count
+
+        except WebDriverException:
+            try:
+                likes_count = self.browser.find_element_by_css_selector(
+                    "section._1w76c._nlmjy > div > a > span"
+                ).text
+
+                if likes_count:
+                    return format_number(likes_count)
+                else:
+                    self.logger.info("Failed to check likes' count  ~empty string\n")
+                    return -1
+
+            except NoSuchElementException:
+                self.logger.info("Failed to check likes' count\n")
+                return -1
 
 
 def nf_validate_user_call(

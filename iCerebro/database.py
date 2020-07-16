@@ -52,8 +52,10 @@ class Post(Base):
     id = Column('id', Integer, Sequence('post_id_seq'), primary_key=True)
     date_posted = Column('date_posted', DateTime, nullable=False)
     user_id = Column('user_id', ForeignKey('users.id'), nullable=False)
+    link = Column('link', String(500), nullable=True)
     src = Column('src', String(500), nullable=False, unique=True)
     caption = Column('caption', String(3000), nullable=True)
+    likes = Column('likes', Integer, nullable=True)
 
     user = relationship('User', foreign_keys=[user_id])
     comments = relationship('Comment')
