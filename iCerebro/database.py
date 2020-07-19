@@ -35,7 +35,6 @@ class User(Base):
     followers_count = Column(Integer, nullable=False, default=0)
     following_count = Column(Integer, nullable=False, default=0)
     posts_count = Column(Integer, nullable=False, default=0)
-
     following = relationship('User',
                              secondary='follow_relations',
                              primaryjoin=id == follow_relations.c.follower_id,

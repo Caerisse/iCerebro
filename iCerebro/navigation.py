@@ -1,7 +1,7 @@
 from time import sleep
 
 from instapy.util import web_address_navigator, get_current_url
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver import ActionChains
 from selenium.webdriver.remote.webelement import WebElement
 
@@ -30,6 +30,8 @@ def nf_go_to_tag_page(
         tag: str
 ):
     """Navigates to the provided tag page by typing it on explore"""
+
+    tag_link = "https://www.instagram.com/explore/tags/{}/".format(tag)
     try:
         nf_type_on_explore(self, "#" + tag)
         sleep(2)
@@ -37,17 +39,9 @@ def nf_go_to_tag_page(
         tag_option = self.browser.find_element_by_xpath(
             '//a[@href="/explore/tags/{}/"]'.format(tag)
         )
-        # self.browser.execute_script("arguments[0].click();", tag_option)
-        nf_click_center_of_element(self, tag_option)
+        nf_click_center_of_element(self, tag_option, tag_link)
     except NoSuchElementException:
         self.logger.warning("Failed to get a page element")
-
-    sleep(1)
-    tag_link = "https://www.instagram.com/explore/tags/{}/".format(tag)
-    if not check_if_in_correct_page(self, tag_link):
-        self.logger.error("Failed to go to tag page, navigating there")
-        # TODO: retry to get there naturally
-        web_address_navigator(self.browser, tag_link)
 
 
 def nf_go_to_user_page(
@@ -55,6 +49,7 @@ def nf_go_to_user_page(
         username: str
 ):
     """Navigates to the provided user page by typing its name on explore"""
+    user_link = "https://www.instagram.com/{}/".format(username)
     try:
         nf_type_on_explore(self, username)
         sleep(2)
@@ -62,16 +57,9 @@ def nf_go_to_user_page(
         user_option = self.browser.find_element_by_xpath(
             '//a[@href="/{}/"]'.format(username)
         )
-        nf_click_center_of_element(self, user_option)
+        nf_click_center_of_element(self, user_option, user_link)
     except NoSuchElementException:
         self.logger.warning("Failed to go to get a page element")
-
-    sleep(1)
-    user_link = "https://www.instagram.com/{}/".format(username)
-    if not check_if_in_correct_page(self, user_link):
-        self.logger.error("Failed to go to user page, navigating there")
-        # TODO: retry to get there naturally
-        web_address_navigator(self.browser, user_link)
 
 
 def nf_type_on_explore(
@@ -108,7 +96,8 @@ def nf_scroll_into_view(
 
 def nf_click_center_of_element(
         self,
-        element: WebElement
+        element: WebElement,
+        desired_link: str
 ):
     """Moves pointer to center of element and then clicks"""
     (
@@ -121,6 +110,16 @@ def nf_click_center_of_element(
         .click()
         .perform()
     )
+    try:
+        sleep(1)
+        if not check_if_in_correct_page(self, desired_link):
+            self.browser.execute_script("arguments[0].click();", element)
+        sleep(1)
+        if not check_if_in_correct_page(self, desired_link):
+            self.logger.warning("Failed to press element, navigating to desired link")
+            web_address_navigator(self.browser, desired_link)
+    except StaleElementReferenceException:
+        pass
 
 
 def nf_find_and_press_back(
@@ -140,24 +139,20 @@ def nf_find_and_press_back(
         '/html/body/div[1]/section/nav[1]/div/header//a/span/*[name()="svg"][@aria-label="Back"]',
     ]
     success = False
-    back_path = ""
+    back = None
     for back_path in possibles:
         if not success:
             try:
                 back = self.browser.find_element_by_xpath(back_path)
-                nf_scroll_into_view(self, back)
-                nf_click_center_of_element(self, back)
-                self.browser.execute_script("arguments[0].click();", back)
                 success = True
                 break
             except NoSuchElementException:
                 success = False
-                # self.logger.warning("Failed to get back button with xpath:\n{}".format(back_path))
-
     if not success:
         self.logger.warning("Failed to get back button with all xpaths")
     else:
-        self.logger.info("Pressed back button with xpath:\n     {}".format(back_path))
+        nf_scroll_into_view(self, back)
+        nf_click_center_of_element(self, back, link)
         sleep(1)
         bad_loading = self.browser.find_elements_by_xpath(
             '/html/body/div[1]/section[@class="_9eogI E3X2T"]/span[@class="BHkOG PID-B"]'
@@ -165,33 +160,25 @@ def nf_find_and_press_back(
         if bad_loading and try_n <= 3:
             try_n += 1
             nf_find_and_press_back(self, link, try_n)
-
     if not check_if_in_correct_page(self, link):
         self.logger.error("Failed to go back, navigating there")
         # TODO: retry to get there naturally
         web_address_navigator(self.browser, link)
-    else:
-        self.logger.info("and ended in correct page")
 
 
 def nf_go_from_post_to_profile(
         self,
         username: str
 ):
+    user_link = "https://www.instagram.com/{}/".format(username)
     try:
         username_button = self.browser.find_element_by_xpath(
             '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
         )
         nf_scroll_into_view(self, username_button)
-        nf_click_center_of_element(self, username_button)
+        nf_click_center_of_element(self, username_button, user_link)
     except NoSuchElementException:
-        self.logger.warning("Failed to get user page button")
-
-    sleep(1)
-    user_link = "https://www.instagram.com/{}/".format(username)
-    if not check_if_in_correct_page(self, user_link):
-        self.logger.error("Failed to go to user page, navigating there")
-        # TODO: retry to get there naturally
+        self.logger.warning("Failed to get user page button, navigating there")
         web_address_navigator(self.browser, user_link)
 
 
@@ -204,11 +191,7 @@ def nf_go_to_follow_page(self, which: str, username: str):
             '//a[@href="/{}/{}/"]'.format(username, which)
         )
         nf_scroll_into_view(self, follow_which_button)
-        nf_click_center_of_element(self, follow_which_button)
+        nf_click_center_of_element(self, follow_which_button, follow_link)
     except NoSuchElementException:
-        self.logger.warning("Failed to get {} page button".format(which))
-    sleep(2)
-    if not check_if_in_correct_page(self, follow_link):
-        self.logger.error("Failed to go to {} page, navigating there".format(which))
-        # TODO: retry to get there naturally
+        self.logger.error("Failed to get {} page button, navigating there".format(which))
         web_address_navigator(self.browser, follow_link)

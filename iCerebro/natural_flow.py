@@ -3,7 +3,7 @@ from platform import python_version
 from typing import List
 
 from instapy.util import update_activity, format_number, highlight_print
-from instapy.like_util import like_image, verify_liking
+from instapy.like_util import like_image
 from instapy.xpath import read_xpath
 from instapy.unfollow_util import follow_restriction, follow_user, set_automated_followed_pool
 from instapy.time_util import sleep
@@ -135,27 +135,19 @@ def like_by_tags(
                 for post in posts:
                     link = post.get_attribute("href")
                     if link not in already_interacted_links:
-
-                        self.logger.info("about to scroll to post")
                         sleep(1)
                         nf_scroll_into_view(self, post)
-                        self.logger.info("about to click to post")
                         sleep(1)
-                        nf_click_center_of_element(self, post)
-
+                        nf_click_center_of_element(self, post, link)
                         success, msg, state = nf_interact_with_post(
                             self,
                             link,
                             amount,
                             state,
                         )
-
-                        self.logger.info("Returned from liking, should still be in post page")
-                        sleep(2)
+                        sleep(1)
                         nf_find_and_press_back(self, "https://www.instagram.com/explore/tags/{}/".format(tag))
-
                         already_interacted_links.append(link)
-
                         if success:
                             # TODO add to quotient
                             pass
@@ -285,13 +277,10 @@ def like_by_users(
                 for post in posts:
                     link = post.get_attribute("href")
                     if link not in already_interacted_links:
-                        self.logger.info("about to scroll to post")
                         sleep(1)
                         nf_scroll_into_view(self, post)
-                        self.logger.info("about to click to post")
                         sleep(1)
-                        nf_click_center_of_element(self, post)
-
+                        nf_click_center_of_element(self, post, link)
                         success, msg, state = nf_interact_with_post(
                             self,
                             link,
@@ -299,17 +288,12 @@ def like_by_users(
                             state,
                             users_validated,
                         )
-
-                        self.logger.info(
-                            "Returned from liking, should still be in post page")
-                        sleep(5)
+                        sleep(1)
                         nf_find_and_press_back(
                             self,
                             "https://www.instagram.com/{}/".format(username)
                         )
-
                         already_interacted_links.append(link)
-
                         if success:
                             break
                         if msg == "block on likes":
@@ -363,7 +347,7 @@ def follow_user_follow(
     valid = {"followers", "followings"}
     if follow not in valid:
         raise ValueError(
-            "nf_follow_user_follow: follow must be one of %r." % valid)
+            "follow_user_follow: follow must be one of %r." % valid)
 
     self.logger.info("Starting to follow user {}".format(follow))
 
@@ -434,15 +418,12 @@ def follow_user_follow(
                         msg = ""
                         try:
                             user_text = user.text
+                            user_link2 = "https://www.instagram.com/{}".format(user_text)
                             self.logger.info("Followed [{}/{}]".format(state["followed"], actual_amount))
                             self.logger.info("--> Trying user {}".format(user_text.encode("utf-8")))
-                            self.logger.info("about to scroll to user")
-                            sleep(1)
                             nf_scroll_into_view(self, user)
-                            self.logger.info("about to click to user")
                             sleep(1)
-                            # nf_click_center_of_element(self, user)
-                            self.browser.execute_script("arguments[0].click();", user)
+                            nf_click_center_of_element(self, user, user_link2)
                             sleep(2)
                             valid = False
                             if (
@@ -455,7 +436,6 @@ def follow_user_follow(
                                 valid, details = nf_validate_user_call(self, user_text)
                                 self.logger.info("Valid User: {}, details: {}".format(valid, details))
                             if valid:
-                                self.logger.info("about to follow user")
                                 follow_state, msg = follow_user(
                                     self.browser,
                                     "profile",
@@ -710,7 +690,7 @@ def unfollow_users(
         self,
         amount: int = 10,
         custom_list_enabled: bool = False,
-        custom_list: list = [],
+        custom_list=None,
         custom_list_param: str = "all",
         instapy_followed_enabled: bool = False,
         instapy_followed_param: str = "all",
@@ -723,6 +703,8 @@ def unfollow_users(
 ):
     """Unfollows (default) 10 users from your following list"""
 
+    if custom_list is None:
+        custom_list = []
     if self.aborting:
         return self
 
@@ -771,3 +753,85 @@ def unfollow_users(
             return self
 
     return self
+
+
+def follow_by_list(
+        self,
+        follow_list,
+        users_validated: bool = False,
+):
+    if self.aborting:
+        return self
+
+    state = {
+        'followed': 0,
+        'already_followed': 0,
+        'not_valid_users': 0
+    }
+
+    for index, username in enumerate(follow_list):
+        self.logger.info("User [{}/{}]".format(index + 1, len(follow_list)))
+        if self.jumps["consequent"]["follows"] >= self.jumps["limit"]["follows"]:
+            self.logger.warning(
+                "--> Follow quotient reached its peak!\t~leaving follow_by_list"
+            )
+            # reset jump counter before breaking the loop
+            self.jumps["consequent"]["follows"] = 0
+            # turn on `quotient_breach` to break the internal iterators
+            # of the caller
+            self.quotient_breach = True
+            break
+        if follow_restriction(
+                "read", username, self.follow_times, self.logger
+        ):
+            state["already_followed"] += 1
+            self.logger.info("Account {} already followed {} times".format(username, self.follow_times))
+            continue
+
+        if not users_validated:
+            validation, details = nf_validate_user_call(self, username)
+            if not validation:
+                self.logger.info(
+                    "--> Not a valid user: {}".format(details)
+                )
+                state["not_valid_users"] += 1
+                continue
+
+        follow_state, msg = follow_user(
+            self.browser,
+            "profile",
+            self.username,
+            username,
+            None,
+            self.blacklist,
+            self.logger,
+            self.logfolder,
+        )
+        if follow_state is True:
+            state['followed'] += 1
+            self.logger.info("user followed")
+        elif msg == "already followed":
+            state["already_followed"] += 1
+
+        elif msg == "jumped":
+            # will break the loop after certain consecutive jumps
+            self.jumps["consequent"]["follows"] += 1
+
+        if self.do_like and random.randint(0, 100) <= self.user_interact_percentage:
+            self.logger.info(
+                "--> User gonna be interacted: '{}'".format(username)
+            )
+            # disable re-validating user in like_by_users
+            like_by_users(
+                self,
+                [username],
+                None,
+                True,
+            )
+
+    self.logger.info("Followed: {}".format(state['followed']))
+    self.logger.info("Already followed: {}".format(state['already_followed']))
+    self.logger.info("Not Valid Users: {}".format(state['not_valid_users']))
+    self.followed += state["followed"]
+    self.already_followed += state["already_followed"]
+    self.not_valid_users += state["not_valid_users"]

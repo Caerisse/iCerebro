@@ -7,11 +7,11 @@ from instapy.relationship_tools import get_followers, get_following
 from instapy.util import web_address_navigator, deform_emojis, get_relationship_counts, getUserData, update_activity, \
     format_number
 from progressbar import progressbar
-from selenium.common.exceptions import WebDriverException, NoSuchElementException
+from selenium.common.exceptions import WebDriverException, NoSuchElementException, InvalidSelectorException
 
 from iCerebro.database import Post, Comment, User
 from iCerebro.navigation import nf_scroll_into_view, nf_click_center_of_element, \
-    nf_find_and_press_back, check_if_in_correct_page
+    nf_find_and_press_back
 from sqlalchemy.exc import SQLAlchemyError
 
 
@@ -21,37 +21,31 @@ def db_store_comments(
         post_link: str,
 ):
     """Stores all comments of open post then goes back to post page"""
-    try:
-        comments_button = self.browser.find_elements_by_xpath(
+    comments_button = self.browser.find_elements_by_xpath(
             '//article//div[2]/div[1]//a[contains(@href,"comments")]'
-        )
-        if comments_button:
-            nf_scroll_into_view(self, comments_button[0])
-            nf_click_center_of_element(self, comments_button[0])
-            sleep(2)
+    )
+    if comments_button:
+        try:
+            self.logger.info("Loading comments...")
             comments_link = post_link + 'comments/'
-            if not check_if_in_correct_page(self, comments_link):
-                self.logger.error("Failed to go to comments page, navigating there")
-                # TODO: retry to get there naturally
-                web_address_navigator(self.browser, comments_link)
-            more_comments = self.browser.find_elements_by_xpath(
-                '//span[@aria-label="Load more comments"]'
-            )
-            counter = 1
-            while more_comments and counter <= 10:
-                self.logger.info("Loading comments ({}/10)...".format(counter))
-                nf_scroll_into_view(self, more_comments[0])
-                self.browser.execute_script(
-                    "arguments[0].click();", more_comments[0])
-                more_comments = self.browser.find_elements_by_xpath(
-                    '//span[@aria-label="Load more comments"]'
-                )
-                counter += 1
+            nf_scroll_into_view(self, comments_button[0])
+            nf_click_center_of_element(self, comments_button[0], comments_link)
+            sleep(1)
+            for _ in range(9):
+                try:
+                    more_comments = self.browser.find_element_by_xpath(
+                        '//span[@aria-label="Load more comments"]'
+                    )
+                except NoSuchElementException:
+                    break
+                nf_scroll_into_view(self, more_comments)
+                self.browser.execute_script("arguments[0].click();", more_comments)
 
             comments = self.browser.find_elements_by_xpath(
                 '/html/body/div[1]/section/main/div/ul/ul[@class="Mr508"]'
             )
-            for comment in comments:
+            self.logger.info("Saving comments")
+            for comment in progressbar(comments):
                 inner_container = comment.find_element_by_xpath(
                     './/div[@class="C4VMK"]'
                 )
@@ -74,14 +68,13 @@ def db_store_comments(
                     )
                     self.db.session.add(comment)
                     self.db.session.commit()
-        else:
-            self.logger.error("No comments found")
-    except SQLAlchemyError:
-        self.db.session.rollback()
-        raise
-    finally:
-        self.db.session.commit()
-        nf_find_and_press_back(self, post_link)
+                    self.db.session.expunge(comment)
+        except SQLAlchemyError:
+            self.db.session.rollback()
+            raise
+        finally:
+            self.db.session.commit()
+            nf_find_and_press_back(self, post_link)
 
 
 def db_get_or_create_user(
@@ -157,8 +150,11 @@ def scrap_for_user_relationships(self, starting_username: str):
         self.db.session.commit()
     except SQLAlchemyError:
         self.db.session.rollback()
-
-    if starting_user and len(starting_user.followers) != followers_count:
+    already_saved_followers = [follower.username for follower in starting_user.followers]
+    already_saved_following = [following.username for following in starting_user.following]
+    saved_followers_count = len(already_saved_followers)
+    saved_following_count = len(already_saved_following)
+    if starting_user and saved_followers_count != followers_count:
         followers = get_followers(
             self.browser,
             starting_username,
@@ -169,17 +165,33 @@ def scrap_for_user_relationships(self, starting_username: str):
             self.logger,
             self.logfolder
         )
-        # TODO: remove relationships no longer in place
-        self.logger.info("Saving followers data of {}".format(starting_username))
-        for username in progressbar(followers):
-            try:
+        already_saved_followers_set = set(already_saved_followers)
+        followers_set = set(followers)
+        followers = list(followers_set - already_saved_followers_set)
+        followers_no_more = list(already_saved_followers_set - followers_set)
+        if saved_followers_count - len(followers_no_more) > 0:
+            self.logger.info("{} of {}'s followers already in the database".format(
+                saved_followers_count, starting_username))
+        try:
+            self.logger.info("Saving followers of {}".format(starting_username))
+            for username in progressbar(followers):
                 user = db_get_or_create_user(self, username)
+                starting_user.followers.append(user)
                 self.db.session.add(user)
                 self.db.session.commit()
-            except SQLAlchemyError:
-                self.db.session.rollback()
+                self.db.session.expunge(user)
+            if len(followers_no_more) != 0:
+                self.logger.info("Saving un-followers of {}".format(starting_username))
+                for username in progressbar(followers_no_more):
+                    user = db_get_or_create_user(self, username)
+                    starting_user.followers.remove(user)
+                    self.db.session.add(user)
+                    self.db.session.commit()
+                    self.db.session.expunge(user)
+        except SQLAlchemyError:
+            self.db.session.rollback()
 
-    if starting_user and len(starting_user.following) != following_count:
+    if starting_user and saved_following_count != following_count:
         following = get_following(
             self.browser,
             starting_username,
@@ -190,14 +202,31 @@ def scrap_for_user_relationships(self, starting_username: str):
             self.logger,
             self.logfolder
         )
-        self.logger.info("Saving following data of {}".format(starting_username))
-        for username in progressbar(following):
-            try:
+        already_saved_following_set = set(already_saved_followers)
+        following_set = set(following)
+        following = list(following_set - already_saved_following_set)
+        following_no_more = list(already_saved_following_set - following_set)
+        if saved_following_count - len(following_no_more) > 0:
+            self.logger.info("{} of {}'s followings already in the database".format(
+                saved_following_count, starting_username))
+        try:
+            self.logger.info("Saving following of {}".format(starting_username))
+            for username in progressbar(following):
                 user = db_get_or_create_user(self, username)
+                starting_user.following.append(user)
                 self.db.session.add(user)
                 self.db.session.commit()
-            except SQLAlchemyError:
-                self.db.session.rollback()
+                self.db.session.expunge(user)
+            if len(following_no_more) != 0:
+                self.logger.info("Saving un-following of {}".format(starting_username))
+                for username in progressbar(following_no_more):
+                    user = db_get_or_create_user(self, username)
+                    starting_user.following.remove(user)
+                    self.db.session.add(user)
+                    self.db.session.commit()
+                    self.db.session.expunge(user)
+        except SQLAlchemyError:
+            self.db.session.rollback()
 
 
 def store_all_posts_of_user(self, username: str):
@@ -221,25 +250,34 @@ def store_all_posts_of_user(self, username: str):
         self.db.session.rollback()
 
     if user and len(user.posts) != posts_count:
-        post_links = get_links_for_username(
-            self.browser,
-            self.username,
-            username,
-            1000,
-            self.logger,
-            self.logfolder
-        )
-        self.logger.info("Saving post data of {}".format(username))
+        try:
+            post_links = get_links_for_username(
+                self.browser,
+                self.username,
+                username,
+                100,
+                self.logger,
+                self.logfolder
+            )
+        except InvalidSelectorException:
+            # Private account, get_links_for_username already prints it on log
+            return
+        except Exception:
+            self.logger.error("Failed to get post links of {}".format(username))
+            return
         already_saved_posts = self.db.session.query(Post).filter(Post.user == user).all()
+        if len(already_saved_posts) != 0:
+            self.logger.info("{} of {}'s posts already in the database".format(len(already_saved_posts), username))
         post_links = list(set(post_links) - set([post.link for post in already_saved_posts]))
         already_saved_post_srcs = [post.src for post in already_saved_posts]
-        for post_link in progressbar(post_links):
+        for i, post_link in enumerate(post_links):
+            self.logger.info("Saving post {}/{} of {}".format(i+1, len(post_links), username))
             web_address_navigator(self.browser, post_link)
             try:
-                username = self.browser.find_element_by_xpath(
+                username_button = self.browser.find_element_by_xpath(
                     '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
                 )
-                username_text = username.text
+                username_text = username_button.text
                 images = self.browser.find_elements_by_xpath(
                     '/html/body/div[1]/section/main/div/div/article//img[@class="FFVAD"]'
                 )
@@ -247,9 +285,12 @@ def store_all_posts_of_user(self, username: str):
                 if more_button:
                     nf_scroll_into_view(self, more_button[0])
                     more_button[0].click()
-                caption = self.browser.find_element_by_xpath(
-                    "/html/body/div[1]/section/main/div/div/article//div/div/span/span"
-                ).text
+                try:
+                    caption = self.browser.find_element_by_xpath(
+                        "/html/body/div[1]/section/main/div/div/article//div/div/span/span"
+                    ).text
+                except NoSuchElementException:
+                    caption = None
                 caption = "" if caption is None else caption
                 likes_count = get_like_count(self)
                 image_descriptions = []
@@ -295,8 +336,9 @@ def store_all_posts_of_user(self, username: str):
                         db_posts.append(post)
                 self.db.session.commit()
                 if db_posts:
-                    self.logger.info("About to store comments")
                     db_store_comments(self, db_posts, post_link)
+                    for post in db_posts:
+                        self.db.session.expunge(post)
             except SQLAlchemyError:
                 self.db.session.rollback()
             finally:

@@ -243,6 +243,9 @@ def nf_check_post(
                 if db_posts:
                     self.logger.info("About to store comments")
                     db_store_comments(self, db_posts, post_link)
+                self.db.session.expunge(user)
+                for post in db_posts:
+                    self.db.session.expunge(post)
             except SQLAlchemyError:
                 self.db.session.rollback()
             finally:
@@ -610,11 +613,11 @@ def nf_validate_user_call(
                     user.following_count = following_count
                 if number_of_posts:
                     user.posts_count = number_of_posts
+                self.db.session.expunge(user)
             except SQLAlchemyError:
                 self.db.session.rollback()
             finally:
                 self.db.session.commit()
-
         if post_link:
             nf_find_and_press_back(self, post_link)
 
