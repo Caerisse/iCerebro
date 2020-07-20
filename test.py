@@ -1,20 +1,14 @@
 # Imports
-from natural_flow import MyInstaPy
 import random
-import argparse
-import os
-import sys
 
-args = {}
-args['account'] = 'testingaccount2020'
-args['no-interact'] = False
+from iCerebro import ICerebro
 
-sys.path.append('./{}'.format(args['account']))
+args = {'account': 'testingaccount2020', 'no-interact': False}
 
 # Login credentials
-from credentials import insta_username, insta_password
+from testingaccount2020.credentials import insta_username, insta_password
 # Account config
-import config
+import testingaccount2020.config as config
 
 # ---------------------------------------------------------------------------- #
 #                               General Settings                               #
@@ -22,7 +16,7 @@ import config
 
 # get an InstaPy session and login
 # set headless_browser=True to run InstaPy in the background
-session = MyInstaPy(  username=insta_username,
+session = ICerebro( username=insta_username,
                     password=insta_password,
                     want_check_browser=False,
                     headless_browser=config.headless_browser,
@@ -30,7 +24,16 @@ session = MyInstaPy(  username=insta_username,
 
 session.login()
 
-session.set_use_image_analisis(True)
+# Scrap start
+# session.set_use_image_analysis(False)
+# session.set_store_in_database(True)
+# session.complete_user_relationships_of_users_already_in_db()
+# session.complete_posts_of_users_already_in_db()
+# exit()
+# Scrap end
+
+session.set_use_image_analysis(True)
+session.set_store_in_database(True)
 
 # dont stop following these people
 session.set_dont_include(config.friend_list)
@@ -40,7 +43,7 @@ session.set_dont_like(config.dont_like)
     
 # Quota and delay settings
 # TODO: hook to a simple AI
-session.set_quota_supervisor(   enabled=True, 
+session.set_quota_supervisor(   enabled=True,
                                 sleep_after=["likes", "comments_d", "follows", "unfollows", "server_calls_h"], 
                                 sleepyhead=True, stochastic_flow=True, notify_me=True,
                                 peak_likes_hourly=config.peak_likes_hourly,
@@ -66,21 +69,21 @@ session.set_action_delays(      enabled=True,
     
 
 # quality of account to classify for being followed
-session.set_relationship_bounds(enabled=True,
-                                delimit_by_numbers=True,
-                                max_followers=1000000,
-                                min_followers=0,
-                                min_following=0,
-                                min_posts=1          )
+# session.set_relationship_bounds(enabled=True,
+#                                 delimit_by_numbers=True,
+#                                 max_followers=1000000,
+#                                 min_followers=0,
+#                                 min_following=0,
+#                                 min_posts=1          )
 
 # Ignore everything from these users
 session.set_ignore_users(config.ignored_users)
 
-# Not interact with post not in latin caracters
+# Not interact with post not in latin characters
 session.set_mandatory_language(enabled=True, character_set=['LATIN'])
 
 # Not unfollow anyone whi interacted with the account
-#session.set_dont_unfollow_active_users(enabled=True, posts=3)
+# session.set_dont_unfollow_active_users(enabled=True, posts=3)
 
 # Skip certains users (In this case will not interact with private accounts 80 percent of the time 
 # and not at all with no profile pics account)
@@ -89,13 +92,13 @@ session.set_skip_users( skip_private=config.skip_private,
                         skip_no_profile_pic=config.skip_no_profile_pic,
                         no_profile_pic_percentage=config.no_profile_pic_percentage,
                         skip_business=config.skip_business,
-    		            skip_non_business=config.skip_non_business,
+                        skip_non_business=config.skip_non_business,
                         business_percentage=config.business_percentage,
                         skip_business_categories=config.skip_business_categories,
                         dont_skip_business_categories=config.dont_skip_business_categories  )
 
 # Limit of previous liking in post to allow interact
-session.set_delimit_liking( enabled=True, max_likes=None, min_likes=50 )
+# session.set_delimit_liking( enabled=True, max_likes=None, min_likes=50 )
     
 # ---------------------------------------------------------------------------- #
 #                               Activity Settings                              #
@@ -118,9 +121,8 @@ session.set_do_story(       enabled = True,
                             percentage = config.do_story_percentage, 
                             simulate = False                            )
 
-session.set_user_interact(  percentage = 100, 
-                            amount = random.randint(config.user_interact_amount,
-                                                    config.user_interact_amount*3),
+session.set_user_interact(  percentage = 100,
+                            amount = 3,
                             randomize = False,  
                             media = 'Photo'                             )
 
@@ -135,38 +137,33 @@ try:
         # ---------------------------------------------------------------------------- #
 
         if not args['no-interact']:
-            """ 
+
             # Remove outgoing unapproved follow requests from private accounts
             # session.remove_follow_requests(amount=200, sleep_delay=600)
             
             #Accept follow requests
-            session.accept_follow_requests( amount=config.accept_follow_requests_amount, 
-                                            sleep_delay=config.accept_follow_requests_sleep_delay)
+            # session.accept_follow_requests( amount=config.accept_follow_requests_amount,
+            #                                 sleep_delay=config.accept_follow_requests_sleep_delay)
 
             # Follow some users of given account followers
-            session.follow_user_followers(  random.sample(config.similar_accounts, 
-                                                random.randint( config.follow_user_followers_amount_of_accounts,
-                                                                config.follow_user_followers_amount_of_accounts*2   )), 
-                                            amount=random.randint(  config.follow_user_followers_amount,
-                                                                    config.follow_user_followers_amount*2   ), 
-                                            randomize=True, 
-                                            interact=True) 
-            """
-                                            
-            # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
-            session.nf_like_by_tags(   random.sample(config.like_tag_list, 
-                                        random.randint( config.like_by_tags_amount_of_tags,
-                                                        config.like_by_tags_amount_of_tags*2    )), 
-                                    amount=random.randint(  config.like_by_tags_amount, 
-                                                            config.like_by_tags_amount*2    ),
-                                    skip_top_posts=False)
+            # session.nf_follow_user_follow(  "followers",
+            #                                 random.sample(config.similar_accounts, 1),
+            #                                 amount=50,
+            #                                 randomize=True)
 
-            """ 
+            # Like post of given tags and interact with users in the process (Follow some, and or like more post of same users)
+            session.nf_like_by_tags(random.sample(config.like_tag_list, 1),
+                                    amount=10,
+                                    skip_top_posts=False)
+            session.nf_like_by_users(random.sample(config.similar_accounts, 1), amount=10)
+            session.nf_like_by_feed(amount=10)
+
+
             # Unfollow some users who dont follow back after 3-5 days
-            session.unfollow_users( amount=20, instapy_followed_enabled=True, 
-                                    instapy_followed_param="nonfollowers", style="RANDOM", 
-                                    unfollow_after=random.randint(72, 120)*60*60, sleep_delay=random.randint(403,501))
-            """
+            # session.nf_unfollow_users(amount=20, instapy_followed_enabled=True,
+            #                         instapy_followed_param="nonfollowers", style="RANDOM",
+            #                         unfollow_after=random.randint(72, 120)*60*60, sleep_delay=random.randint(403,501))
+
         
 except KeyboardInterrupt:
     pass
