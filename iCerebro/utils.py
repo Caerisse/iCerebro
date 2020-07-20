@@ -670,7 +670,7 @@ def process_comments(
 def nf_get_all_posts_on_element(
         element: WebElement
 ) -> List[WebElement]:
-    return element.find_elements_by_xpath('//a[starts-with(@href, "/p/")]')
+    return element.find_elements_by_xpath('//a[starts-with(@href, "/p/") and not(contains(@href,"liked_by"))]')
 
 
 def nf_get_all_users_on_element(

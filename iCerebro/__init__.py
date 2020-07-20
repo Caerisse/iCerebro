@@ -8,7 +8,7 @@ from sqlalchemy import func
 from iCerebro.database import IgDb, User
 from iCerebro.db_utils import scrap_for_user_relationships, store_all_posts_of_user
 from iCerebro.image_analisis import ImageAnalysis
-from iCerebro.natural_flow import like_by_tags, follow_user_follow, like_by_users, unfollow_users
+from iCerebro.natural_flow import like_by_tags, follow_user_follow, like_by_users, unfollow_users, like_by_feed
 from iCerebro.upload import upload_single_image
 
 
@@ -66,6 +66,12 @@ class ICerebro(InstaPy):
         users_validated: bool = False
     ):
         like_by_users(self, usernames, amount, users_validated)
+
+    def nf_like_by_feed(
+            self,
+            amount: int = None,
+    ):
+        like_by_feed(self, amount)
 
     def nf_follow_user_follow(
             self,

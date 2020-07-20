@@ -195,3 +195,15 @@ def nf_go_to_follow_page(self, which: str, username: str):
     except NoSuchElementException:
         self.logger.error("Failed to get {} page button, navigating there".format(which))
         web_address_navigator(self.browser, follow_link)
+
+
+def nf_go_to_home(self):
+    home_link = "https://www.instagram.com/"
+    if check_if_in_correct_page(self, home_link):
+        return
+    try:
+        home_button = self.browser.find_element_by_xpath('//a[@href="/"]')
+        nf_click_center_of_element(self, home_button, home_link)
+    except NoSuchElementException:
+        self.logger.error("Failed to get home button, navigating there")
+        web_address_navigator(self.browser, home_link)

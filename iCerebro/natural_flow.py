@@ -60,7 +60,7 @@ def like_by_tags(
         self.logger.info("--> {}".format(tag.encode("utf-8")))
 
         tag = tag[1:] if tag[:1] == "#" else tag
-
+        tag_link =  "https://www.instagram.com/explore/tags/{}/".format(tag)
         nf_go_to_tag_page(self, tag)
 
         # get amount of post with this hashtag
@@ -106,71 +106,7 @@ def like_by_tags(
 
         sleep(1)
 
-        try_again = 0
-        sc_rolled = 0
-        scroll_nap = 1.5
-        already_interacted_links = []
-        try:
-            while state['liked_img'] in range(0, amount):
-                if sc_rolled > 100:
-                    try_again += 1
-                    if try_again > 2:
-                        self.logger.info(
-                            "'{}' tag POSSIBLY has less images than "
-                            "desired:{} found:{}...".format(
-                                tag,
-                                amount,
-                                len(already_interacted_links)
-                            )
-                        )
-                        break
-                    self.logger.info("Scrolled too much! ~ sleeping 10 minutes")
-                    sleep(600)
-                    sc_rolled = 0
-
-                main_elem = self.browser.find_element_by_tag_name("main")
-                posts = nf_get_all_posts_on_element(main_elem)
-
-                # Interact with links instead of just storing them
-                for post in posts:
-                    link = post.get_attribute("href")
-                    if link not in already_interacted_links:
-                        sleep(1)
-                        nf_scroll_into_view(self, post)
-                        sleep(1)
-                        nf_click_center_of_element(self, post, link)
-                        success, msg, state = nf_interact_with_post(
-                            self,
-                            link,
-                            amount,
-                            state,
-                        )
-                        sleep(1)
-                        nf_find_and_press_back(self, "https://www.instagram.com/explore/tags/{}/".format(tag))
-                        already_interacted_links.append(link)
-                        if success:
-                            # TODO add to quotient
-                            pass
-                        if msg == "block on likes":
-                            # TODO deal with block on likes
-                            pass
-
-                        break
-                else:
-                    # For loop ended means all posts in screen has been interacted with
-                    # will scroll the screen a bit and reload
-                    for i in range(3):
-                        self.browser.execute_script(
-                            "window.scrollTo(0, document.body.scrollHeight);"
-                        )
-                        update_activity(self.browser, state=None)
-                        sc_rolled += 1
-                        sleep(scroll_nap)
-
-        except Exception:
-            raise
-
-        sleep(2)
+        like_loop(self, "TAG", tag_link, amount, state, False)
 
         self.logger.info("Tag [{}/{}]".format(index + 1, len(tags)))
         self.logger.info("--> {} ended".format(tag.encode("utf-8")))
@@ -222,8 +158,8 @@ def like_by_users(
             "Username [{}/{}]".format(index + 1, len(usernames))
         )
         self.logger.info("--> {}".format(username.encode("utf-8")))
-
-        if not check_if_in_correct_page(self, "https://www.instagram.com/{}/".format(username)):
+        user_link = "https://www.instagram.com/{}/".format(username)
+        if not check_if_in_correct_page(self, user_link):
             if len(usernames) == 1 and users_validated:
                 nf_go_from_post_to_profile(self, username)
             else:
@@ -238,82 +174,7 @@ def like_by_users(
                 state["not_valid_users"] += 1
                 continue
 
-        try_again = 0
-        sc_rolled = 0
-        scroll_nap = 1.5
-        already_interacted_links = []
-        try:
-            while state['liked_img'] in range(0, amount):
-
-                if self.jumps["consequent"]["likes"] >= self.jumps["limit"]["likes"]:
-                    self.logger.warning(
-                        "--> Like quotient reached its peak!\t~leaving "
-                        "Like-By-Users activity\n"
-                    )
-                    self.quotient_breach = True
-                    # reset jump counter after a breach report
-                    self.jumps["consequent"]["likes"] = 0
-                    break
-
-                if sc_rolled > 100:
-                    try_again += 1
-                    if try_again > 2:  # you can try again as much as you want by changing this number
-                        self.logger.info(
-                            "'{}' user POSSIBLY has less valid images than "
-                            "desired:{} found:{}...".format(
-                                username, amount, len(already_interacted_links))
-                        )
-                        break
-                    self.logger.info(
-                        "Scrolled too much! ~ sleeping 10 minutes")
-                    sleep(600)
-                    sc_rolled = 0
-
-                main_elem = self.browser.find_element_by_tag_name("main")
-                # feed = main_elem.find_elements_by_xpath('//div[@class=" _2z6nI"]')
-                posts = nf_get_all_posts_on_element(main_elem)
-
-                # Interact with links instead of just storing them
-                for post in posts:
-                    link = post.get_attribute("href")
-                    if link not in already_interacted_links:
-                        sleep(1)
-                        nf_scroll_into_view(self, post)
-                        sleep(1)
-                        nf_click_center_of_element(self, post, link)
-                        success, msg, state = nf_interact_with_post(
-                            self,
-                            link,
-                            amount,
-                            state,
-                            users_validated,
-                        )
-                        sleep(1)
-                        nf_find_and_press_back(
-                            self,
-                            "https://www.instagram.com/{}/".format(username)
-                        )
-                        already_interacted_links.append(link)
-                        if success:
-                            break
-                        if msg == "block on likes":
-                            # TODO deal with block on likes
-                            break
-                else:
-                    # For loop ended means all posts in screen has been interacted with
-                    # will scroll the screen a bit and reload
-                    for i in range(3):
-                        self.browser.execute_script(
-                            "window.scrollTo(0, document.body.scrollHeight);"
-                        )
-                        update_activity(self.browser, state=None)
-                        sc_rolled += 1
-                        sleep(scroll_nap)
-
-        except Exception:
-            raise
-
-        sleep(4)
+        like_loop(self, "USER", user_link, amount, state, users_validated)
 
         self.logger.info("Username [{}/{}]".format(index + 1, len(usernames)))
         self.logger.info("--> {} ended".format(username.encode("utf-8")))
@@ -835,3 +696,116 @@ def follow_by_list(
     self.followed += state["followed"]
     self.already_followed += state["already_followed"]
     self.not_valid_users += state["not_valid_users"]
+
+
+def like_by_feed(
+        self,
+        amount
+):
+    if self.aborting:
+        return self
+
+    state = {
+        'liked_img': 0,
+        'already_liked': 0,
+        'inap_img': 0,
+        'commented': 0,
+        'followed': 0,
+        'not_valid_users': 0,
+    }
+    self.logger.info("Liking by feed")
+    like_loop(self, "FEED", "https://www.instagram.com/", amount, state, True)
+    self.logger.info("Liked: {}".format(state['liked_img']))
+    self.logger.info("Already Liked: {}".format(state['already_liked']))
+    self.logger.info("Commented: {}".format(state['commented']))
+    self.logger.info("Followed: {}".format(state['followed']))
+    self.logger.info("Inappropriate: {}".format(state['inap_img']))
+    self.liked_img += state['liked_img']
+    self.already_liked += state['already_liked']
+    self.commented += state['commented']
+    self.followed += state['followed']
+    self.inap_img += state['inap_img']
+
+
+def like_loop(
+        self,
+        what: str,
+        base_link: str,
+        amount: int,
+        state: dict,
+        users_validated: False
+):
+    try_again = 0
+    sc_rolled = 0
+    scroll_nap = 1.5
+    already_interacted_links = []
+    try:
+        while state['liked_img'] in range(0, amount):
+            if self.jumps["consequent"]["likes"] >= self.jumps["limit"]["likes"]:
+                self.logger.warning(
+                    "--> Like quotient reached its peak!\t~leaving "
+                    "Like-By-{} activity\n".format(what)
+                )
+                self.quotient_breach = True
+                # reset jump counter after a breach report
+                self.jumps["consequent"]["likes"] = 0
+                break
+
+            if sc_rolled > 100:
+                try_again += 1
+                if try_again > 2:
+                    self.logger.info(
+                        "'{}' possibly has less images than "
+                        "desired:{}, found:{}...".format(
+                            what,
+                            amount,
+                            len(already_interacted_links)
+                        )
+                    )
+                    break
+                self.logger.info("Scrolled too much! ~ sleeping 10 minutes")
+                sleep(600)
+                sc_rolled = 0
+
+            main_elem = self.browser.find_element_by_tag_name("main")
+            posts = nf_get_all_posts_on_element(main_elem)
+
+            # Interact with links instead of just storing them
+            for post in posts:
+                link = post.get_attribute("href")
+                if link not in already_interacted_links:
+                    sleep(1)
+                    nf_scroll_into_view(self, post)
+                    sleep(1)
+                    nf_click_center_of_element(self, post, link)
+                    success, msg, state = nf_interact_with_post(
+                        self,
+                        link,
+                        amount,
+                        state,
+                        users_validated
+                    )
+                    sleep(1)
+                    nf_find_and_press_back(self, base_link)
+                    already_interacted_links.append(link)
+                    if success:
+                        # TODO add to quotient
+                        pass
+                    if msg == "block on likes":
+                        # TODO deal with block on likes
+                        pass
+
+                    break
+            else:
+                # For loop ended means all posts in screen has been interacted with
+                # will scroll the screen a bit and reload
+                for i in range(3):
+                    self.browser.execute_script(
+                        "window.scrollTo(0, document.body.scrollHeight);"
+                    )
+                    update_activity(self.browser, state=None)
+                    sc_rolled += 1
+                    sleep(scroll_nap)
+
+    except Exception:
+        raise
