@@ -1,2 +1,8 @@
+django
+gunicorn
+psycopg2-binary
+django-heroku
+django-subscriptions
+dj-database-url
 selenium
-instapy
+pyvirtualdisplay
