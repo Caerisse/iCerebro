@@ -4,5 +4,10 @@ psycopg2-binary
 django-heroku
 django-subscriptions
 dj-database-url
+django-multiselectfield
 selenium
 pyvirtualdisplay
+celery
+torch
+torchvision
+Pillow

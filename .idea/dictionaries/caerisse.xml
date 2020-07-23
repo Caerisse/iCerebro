@@ -13,12 +13,17 @@
       <w>ffvad</w>
       <w>followbackers</w>
       <w>followedback</w>
+      <w>formatters</w>
       <w>geckodriver</w>
       <w>googlenet</w>
+      <w>icerebrouser</w>
+      <w>icerebrousers</w>
       <w>imagenet</w>
       <w>inap</w>
       <w>insta</w>
       <w>instapy</w>
+      <w>instauser</w>
+      <w>instausers</w>
       <w>keypoint</w>
       <w>keypoints</w>
       <w>maskrcnn</w>

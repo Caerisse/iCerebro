@@ -1,5 +1,3 @@
-from rest_framework import permissions
-from .models import Greeting
 
 
 class GreetingPermissions(permissions.BasePermission):

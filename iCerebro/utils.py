@@ -26,6 +26,78 @@ from iCerebro.navigation import nf_scroll_into_view, nf_go_from_post_to_profile,
     nf_go_to_user_page, check_if_in_correct_page
 
 
+class Interactions:
+    def __init__(
+            self,
+            liked_img=0,
+            already_liked=0,
+            liked_comments=0,
+            commented=0,
+            replied_to_comments=0,
+            followed=0,
+            already_followed=0,
+            unfollowed=0,
+            inap_img=0,
+            not_valid_users=0,
+            video_played=0,
+            already_Visited=0,
+            stories_watched=0,
+            reels_watched=0,
+    ):
+        self.liked_img = liked_img
+        self.already_liked = already_liked
+        self.liked_comments = liked_comments
+        self.commented = commented
+        self.replied_to_comments = replied_to_comments
+        self.followed = followed
+        self.already_followed = already_followed
+        self.unfollowed = unfollowed
+        self.inap_img = inap_img
+        self.not_valid_users = not_valid_users
+        self.video_played = video_played
+        self.already_Visited = already_Visited
+        self.stories_watched = stories_watched
+        self.reels_watched = reels_watched
+
+    def __add__(self, other):
+        return (
+            Interactions(
+                self.liked_img + other.liked_img,
+                self.already_liked + other.already_liked,
+                self.liked_comments + other.liked_comments,
+                self.commented + other.commented,
+                self.replied_to_comments + other.replied_to_comments,
+                self.followed + other.followed,
+                self.already_followed + other.already_followed,
+                self.unfollowed + other.unfollowed,
+                self.inap_img + other.inap_img,
+                self.not_valid_users + other.not_valid_users,
+                self.video_played + other.video_played,
+                self.already_Visited + other.already_Visited,
+                self.stories_watched + other.stories_watched,
+                self.reels_watched + other.reels_watched
+            )
+        )
+
+    def __str__(self):
+        string = "Interactions: "
+        string += "\nLiked Images: {}".format(self.liked_img) if self.liked_img != 0 else ""
+        string += "\nAlready Liked Images: {}".format(self.already_liked) if self.already_liked != 0 else ""
+        string += "\nComments Liked: {}".format(self.liked_comments) if self.liked_comments != 0 else ""
+        string += "\nComments Made: {}".format(self.commented) if self.commented != 0 else ""
+        string += "\nComments Replied: {}".format(self.replied_to_comments) if self.replied_to_comments != 0 else ""
+        string += "\nFollowed: {}".format(self.followed) if self.followed != 0 else ""
+        string += "\nAlready Followed: {}".format(self.already_followed) if self.already_followed != 0 else ""
+        string += "\nUnfollowed: {}".format(self.unfollowed) if self.unfollowed != 0 else ""
+        string += "\nInappropriate Images: {}".format(self.inap_img) if self.inap_img != 0 else ""
+        string += "\nNot valid Users: {}".format(self.not_valid_users) if self.not_valid_users != 0 else ""
+        string += "\nVideos Played: {}".format(self.video_played) if self.video_played != 0 else ""
+        string += "\nAlready Visited: {}".format(self.already_Visited) if self.already_Visited != 0 else ""
+        string += "\nStories Watched: {}".format(self.stories_watched) if self.stories_watched != 0 else ""
+        string += "\nReels Watched: {}".format(self.reels_watched) if self.reels_watched != 0 else ""
+        return string
+
+
 def nf_check_post(
         self,
         post_link: str

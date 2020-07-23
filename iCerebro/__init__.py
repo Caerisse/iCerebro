@@ -1,10 +1,12 @@
-from time import sleep
+import logging
+from time import sleep, time
 from typing import List
 
-from instapy import InstaPy
+from pyvirtualdisplay import Display
 from selenium.common.exceptions import ElementClickInterceptedException
 from sqlalchemy import func
 
+from app_main.models import BotSettings
 from iCerebro.database import IgDb, User
 from iCerebro.db_utils import scrap_for_user_relationships, store_all_posts_of_user
 from iCerebro.image_analisis import ImageAnalysis
@@ -12,42 +14,53 @@ from iCerebro.natural_flow import like_by_tags, follow_user_follow, like_by_user
 from iCerebro.upload import upload_single_image
 
 
-class ICerebro(InstaPy):
+class ICerebro:
 
     def __init__(
             self,
-            *args,
-            **kwargs,
+            settings: BotSettings
     ):
-        super(self.__class__, self).__init__(*args, **kwargs)
+        self.start_time = time()
+        self.settings = settings
 
-        self.use_image_analysis = False
-        self.ImgAn = None
-        self.store_in_database = False
-        self.db = None
+        self.username = self.settings.instauser.username
+        self.password = self.settings.password
 
-    def set_use_image_analysis(
-            self,
-            use_image_analysis: bool,
-            classification_model_name: str = 'resnext101_32x8d',
-            detection_model_name: str = 'fasterrcnn_resnet50_fpn',
-    ):
-        self.use_image_analysis = use_image_analysis
-        if use_image_analysis:
+        self.followed_by = 0
+        self.following_num = 0
+
+        self.display = Display(visible=0, size=(800, 600))
+        self.display.start()
+
+        # use this variable to terminate the nested loops after quotient
+        # reaches
+        self.quotient_breach = False
+        # hold the consecutive jumps and set max of it used with QS to break
+        # loops
+        self.jumps = {
+            "consequent": {"likes": 0, "comments": 0, "follows": 0, "unfollows": 0},
+            "limit": {"likes": 7, "comments": 3, "follows": 5, "unfollows": 4},
+        }
+
+        self.check_letters = {}
+
+        self.aborting = False
+
+        self.logger = logging.getLogger('db')
+        self.extra={'bot_username': self.username}
+
+        if self.settings.use_image_analysis:
             self.ImgAn = ImageAnalysis(
-                classification_model_name, detection_model_name)
+                self.settings.classification_model_name, self.settings.detection_model_name)
         else:
             self.ImgAn = None
 
-    def set_store_in_database(
-            self,
-            store_in_database: bool
-    ):
-        self.store_in_database = store_in_database
-        if store_in_database:
-            self.db = IgDb()
-        else:
-            self.db = None
+        self.browser, err_msg = set_selenium_local_session(self)
+        if len(err_msg) > 0:
+            raise Exception(err_msg)
+
+    def login(self):
+        pass
 
     def nf_like_by_tags(
             self,
