@@ -30,7 +30,7 @@ INSTALLED_APPS = [
     "django_fsm_log",
     "subscriptions.apps.SubscriptionsConfig",
     'multiselectfield',
-    "app_db_logger"
+    "app_db_logger",
     "app_web",
 ]
 
