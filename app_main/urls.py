@@ -1,5 +1,4 @@
 from django.urls import path, include
-
 from django.contrib import admin
 
 admin.autodiscover()
@@ -9,18 +8,17 @@ import app_web.views
 urlpatterns = [
     path("", app_web.views.index, name="index"),
     path("admin/", admin.site.urls),
-    path("db/", app_web.views.db, name="db"),
-    path("register/", app_web.views.register, name="register"),
-    path("login/", app_web.views.login, name="login"),
-    path("logout/", app_web.views.logout, name="logout"),
-    path("user_settings/<str:username>/",
+    path('accounts/', include('django.contrib.auth.urls')),
+    path("accounts/profile/<str:username>",
+         app_web.views.user_profile, name="user_profile"),
+    path("accounts/settings/<str:username>/",
          app_web.views.user_settings, name="user_settings"),
-    path("user_subscriptions/<str:username>/",
+    path("accounts/subscriptions/<str:username>/",
          app_web.views.user_subscriptions, name="user_subscriptions"),
-    path("bot_settings/<str:instagramusername>/",
+    path("bot/settings/<str:instausername>/",
          app_web.views.bot_settings, name="bot_settings"),
-    path("bot_run/<str:instagramusername>/",
+    path("bot/run/<str:instausername>/",
          app_web.views.bot_run, name="bot_run"),
-    path("bot_statics/<str:instagramusername>/",
+    path("bot/statics/<str:instausername>/",
          app_web.views.bot_statics, name="bot_statics"),
 ]

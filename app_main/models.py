@@ -8,6 +8,8 @@ from multiselectfield import MultiSelectField
 
 
 class ICerebroUser(models.Model):
+    objects = models.Manager()
+
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     # all other fields must have blank=True option
     # TODO: add fixed options
@@ -34,7 +36,9 @@ def save_user_profile(sender, instance, **kwargs):
 
 
 class InstaUser(models.Model):
-    date_checked = models.DateTimeField(auto_now_add=True)
+    objects = models.Manager()
+
+    date_checked = models.DateTimeField(auto_now=True)
     username = models.CharField(max_length=50, unique=True)
     followers_count = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     following_count = models.IntegerField(default=0, validators=[MinValueValidator(0)])
@@ -69,6 +73,8 @@ class InstaUser(models.Model):
 
 
 class FollowRelation(models.Model):
+    objects = models.Manager()
+
     follower = models.ForeignKey(InstaUser, related_name='followers', on_delete=models.CASCADE)
     followed = models.ForeignKey(InstaUser, related_name='following', on_delete=models.CASCADE)
 
@@ -76,16 +82,16 @@ class FollowRelation(models.Model):
         return "Relationship: {} follows {}".format(self.follower.username, self.followed.username)
 
     class Meta:
-        verbose_name = "follow_relation"
-        verbose_name_plural = "follow_relations"
         unique_together = ('follower', 'followed')
 
 
 class Post(models.Model):
-    date_posted = models.DateTimeField(null=False)
+    objects = models.Manager()
+
+    date_posted = models.DateTimeField()
     instauser = models.ForeignKey(InstaUser, null=True, on_delete=models.SET_NULL)
-    link = models.CharField(max_length=500, blank=False, unique=True)
-    src = ArrayField(models.CharField(max_length=500, blank=True))
+    link = models.CharField(max_length=500, unique=True)
+    src = ArrayField(models.CharField(max_length=500, blank=True), blank=True, null=True)
     caption = models.TextField(blank=True)
     likes = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     ig_desciption = ArrayField(models.TextField(blank=True), blank=True, null=True)
@@ -95,12 +101,10 @@ class Post(models.Model):
     def __str__(self):
         return "Post by {}, link: {}".format(self.instauser.username, self.link)
 
-    class Meta:
-        verbose_name = "post"
-        verbose_name_plural = "posts"
-
 
 class Comment(models.Model):
+    objects = models.Manager()
+
     date_posted = models.DateTimeField(null=False)
     instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL)
     post = models.ForeignKey(Post, on_delete=models.SET_NULL)
@@ -110,30 +114,70 @@ class Comment(models.Model):
         return "Comment by {}, text: {}".format(self.instauser.username, self.text)
 
     class Meta:
-        verbose_name = "comment"
-        verbose_name_plural = "comments"
         unique_together = ('date_posted', 'instauser', 'post')
 
 
+class BotCookies(models.Model):
+    objects = models.Manager()
+
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    date = models.DateTimeField(auto_now=True)
+    cookie_name = models.TextField()
+    cookie_value = models.TextField()
+
+    class Meta:
+        unique_together = ('bot', 'cookie_name')
+
+
+class BotFollowed(models.Model):
+    objects = models.Manager()
+
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    followed = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    times = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    date = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('bot', 'followed')
+
+
+class BotBlacklist(models.Model):
+    objects = models.Manager()
+
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    instauser = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    date = models.DateTimeField(auto_now_add=True)
+    campaign = models.TextField()
+    action = models.TextField()
+
+    class Meta:
+        unique_together = ('bot', 'instauser', 'campaign', 'action')
+
+
 class BotSettings(models.Model):
+    objects = models.Manager()
+
     icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE)
     instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL)
     # TODO: encrypt
     password = models.TextField(blank=False)
 
     page_delay = models.IntegerField(default=5, validators=[MinValueValidator(0)])
-    # proxy_address =
-    # proxy_port =
+
+    use_proxy = models.BooleanField(default=False)
+    proxy_address = models.TextField(blank=True)
+    proxy_port = models.TextField(blank=True)
+
     disable_image_load = models.BooleanField(default=True)
     want_check_browser = models.BooleanField(default=False)
+
     CHOICES_BYPASS = ((1, 'EMAIL'), (2, 'SMS'))
     bypass_security_challenge_using = models.IntegerField(choices=CHOICES_BYPASS, default=1)
 
     dont_include = ArrayField(models.TextField(blank=True), blank=True, null=True)
+    blacklist_campaign = models.TextField(blank=True)
+    # TODO: check usage
     white_list = ArrayField(models.TextField(blank=True), blank=True, null=True)
-    # TODO: check how this is used
-    # self.blacklist = {"enabled": "True", "campaign": ""}
-    # self.automatedFollowedPool = {"all": [], "eligible": []}
 
     follow_times = models.IntegerField(default=1, validators=[MinValueValidator(0)])
     share_times = models.IntegerField(default=1, validators=[MinValueValidator(0)])
@@ -289,6 +333,7 @@ class BotSettings(models.Model):
         (8, "HIRAGANA"),
         (9, "KATAKANA"),
         (10, "THAI"),
+        (11, "MATHEMATICAL")
     )
     mandatory_language = models.BooleanField(default=False)
     mandatory_character = MultiSelectField(choices=CHOICES_LANGUAGE, blank=True, null=True)
@@ -297,16 +342,63 @@ class BotSettings(models.Model):
     # classification_model_name
     # detection_model_name
 
-    action_delays_enabled = models.BooleanField(default=False)
-    action_delays_like = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_comment = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_follow = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_unfollow = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_story = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_randomize = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_random_range_from = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_random_range_to = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
-    action_delays_safety_match = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
+    action_delays_enabled = models.BooleanField(default=True)
+    action_delays_like = models.IntegerField(validators=[MinValueValidator(1)], default=2)
+    action_delays_comment = models.IntegerField(validators=[MinValueValidator(1)], default=2)
+    action_delays_follow = models.IntegerField(validators=[MinValueValidator(1)], default=3)
+    action_delays_unfollow = models.IntegerField(validators=[MinValueValidator(1)], default=7)
+    action_delays_story = models.IntegerField(validators=[MinValueValidator(1)], default=3)
+    action_delays_randomize = models.BooleanField(default=True)
+    action_delays_random_range_from = models.FloatField(
+        validators=[MinValueValidator(0.5), MaxValueValidator(1)],
+        default=0.75)
+    action_delays_random_range_to = models.FloatField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        default=1.25)
+
+    CHOICES_SLEEP = (
+        (1, "like"),
+        (2, "comment"),
+        (3, "follow"),
+        (4, "unfollow"),
+        (5, "server_call")
+    )
+    quota_supervisor_enabled = models.BooleanField(default=True),
+    qs_sleep_after = MultiSelectField(choices=CHOICES_SLEEP, blank=True, null=True)
+    qs_randomize_sleep_time = models.BooleanField(default=True)
+    qs_max_extra_sleep_minutes = models.IntegerField(
+        validators=[MinValueValidator(0)], default=10, blank=True, null=True)
+    qs_peak_server_calls_hourly = models.IntegerField(
+        validators=[MinValueValidator(0)], default=None, blank=True, null=True)
+    qs_peak_server_calls_daily = models.IntegerField(
+        validators=[MinValueValidator(0)], default=4700, blank=True, null=True)
+    qs_peak_likes_hourly = models.IntegerField(
+        validators=[MinValueValidator(0)], default=57, blank=True, null=True)
+    qs_peak_likes_daily = models.IntegerField(
+        validators=[MinValueValidator(0)], default=585, blank=True, null=True)
+    qs_peak_comments_hourly = models.IntegerField(
+        validators=[MinValueValidator(0)], default=21, blank=True, null=True)
+    qs_peak_comments_daily = models.IntegerField(
+        validators=[MinValueValidator(0)], default=182, blank=True, null=True)
+    qs_peak_follows_hourly = models.IntegerField(
+        validators=[MinValueValidator(0)], default=48, blank=True, null=True)
+    qs_peak_follows_daily = models.IntegerField(
+        validators=[MinValueValidator(0)], default=None, blank=True, null=True)
+    qs_peak_unfollows_hourly = models.IntegerField(
+        validators=[MinValueValidator(0)], default=35, blank=True, null=True)
+    qs_peak_unfollows_daily = models.IntegerField(
+        validators=[MinValueValidator(0)], default=402, blank=True, null=True)
+    qs_peak_story_hourly = models.IntegerField(
+        validators=[MinValueValidator(0)], default=None, blank=True, null=True)
+    qs_peak_story_daily = models.IntegerField(
+        validators=[MinValueValidator(0)], default=4700, blank=True, null=True)
+    qs_randomize_peak_number = models.BooleanField(default=True, blank=True, null=True)
+    qs_random_range_from = models.FloatField(
+        validators=[MinValueValidator(0.5), MaxValueValidator(1)],
+        default=0.75, blank=True, null=True)
+    qs_random_range_to = models.FloatField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        default=1.25, blank=True, null=True)
 
 
 class BotScheduledPost(models.Model):
