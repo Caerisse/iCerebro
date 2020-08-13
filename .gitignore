@@ -7,7 +7,6 @@
 **/workspace
 !/geckodriver.log
 /.env
-/app_web/migrations/
 geckodriver.log
 iCerebro/util_comment.py
 iCerebro/util_commenters.py
