@@ -18,6 +18,8 @@ urlpatterns = [
     path("accounts/subscriptions/",
          app_web.views.user_subscriptions, name="user_subscriptions"),
     path("bots/", app_web.views.bots, name="bots"),
+    path("bot/settings/",
+         app_web.views.bot_settings_view, name="bot_settings_new"),
     path("bot/settings/<str:username>/<str:settings_name>/",
          app_web.views.bot_settings_view, name="bot_settings"),
     path("bot/run/<str:username>/",
