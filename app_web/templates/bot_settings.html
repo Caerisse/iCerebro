@@ -3,12 +3,16 @@
 
 {% block content %}
 
-<form method="post" action="">
-    {% csrf_token %}
-    <table>
-        {{BotForm}}
-    </table>
-    <input type="submit" value="Save settings"/>
-</form>
+{% if bot_settings_form %}
+    <form method="post" action="">
+        {% csrf_token %}
+        <table>
+            {{bot_settings_form.as_table}}
+        </table>
+        <input type="submit" value="Save settings"/>
+    </form>
+{% else %}
+    <p>Missing bot settings form</p>
+{% endif %}
 
 {% endblock %}
