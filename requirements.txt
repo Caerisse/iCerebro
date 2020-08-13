@@ -8,6 +8,9 @@ django-multiselectfield
 selenium
 pyvirtualdisplay
 celery
-torch
-torchvision
-Pillow
+requests
+emoji
+plyer
+regex
+PyAutoGUI
+webdriverdownloader
