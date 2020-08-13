@@ -77,8 +77,8 @@ class InstaUser(models.Model):
 class FollowRelation(models.Model):
     objects = models.Manager()
 
-    follower = models.ForeignKey(InstaUser, related_name='followers', on_delete=models.CASCADE)
-    followed = models.ForeignKey(InstaUser, related_name='following', on_delete=models.CASCADE)
+    follower = models.ForeignKey(InstaUser, related_name='following', on_delete=models.CASCADE)
+    followed = models.ForeignKey(InstaUser, related_name='followers', on_delete=models.CASCADE)
 
     def __str__(self):
         return "Relationship: {} follows {}".format(self.follower.username, self.followed.username)
@@ -92,7 +92,7 @@ class Post(models.Model):
     objects = models.Manager()
 
     date_posted = models.DateTimeField()
-    instauser = models.ForeignKey(InstaUser, null=True, on_delete=models.SET_NULL)
+    instauser = models.ForeignKey(InstaUser, null=True, on_delete=models.SET_NULL, related_name='posts')
     link = models.CharField(max_length=500, unique=True)
     src = ArrayField(models.CharField(max_length=500, blank=True), blank=True, null=True)
     caption = models.TextField(blank=True)
@@ -112,8 +112,8 @@ class Comment(models.Model):
     objects = models.Manager()
 
     date_posted = models.DateTimeField(null=False)
-    instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL)
-    post = models.ForeignKey(Post, on_delete=models.SET_NULL)
+    instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL, related_name='comments')
+    post = models.ForeignKey(Post, on_delete=models.SET_NULL, related_name='comments')
     text = models.TextField(blank=True)
 
     def __str__(self):
@@ -127,7 +127,7 @@ class Comment(models.Model):
 class BotCookies(models.Model):
     objects = models.Manager()
 
-    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='cookies')
     date = models.DateTimeField(auto_now=True)
     cookie_name = models.TextField()
     cookie_value = models.TextField()
@@ -140,8 +140,8 @@ class BotCookies(models.Model):
 class BotFollowed(models.Model):
     objects = models.Manager()
 
-    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
-    followed = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='bot')
+    followed = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='followed')
     times = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     date = models.DateTimeField(auto_now=True)
 
@@ -153,8 +153,8 @@ class BotFollowed(models.Model):
 class BotBlacklist(models.Model):
     objects = models.Manager()
 
-    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
-    instauser = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='blacklist')
+    instauser = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='blacklisted')
     date = models.DateTimeField(auto_now_add=True)
     campaign = models.TextField()
     action = models.TextField()
@@ -167,8 +167,8 @@ class BotBlacklist(models.Model):
 class BotSettings(models.Model):
     objects = models.Manager()
 
-    icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE)
-    instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL)
+    icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE, related_name='bot_settings')
+    instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL, related_name='bot_settings')
     name = models.TextField(blank=False)
     # TODO: encrypt
     password = models.TextField(blank=False)
@@ -419,7 +419,7 @@ class BotSettings(models.Model):
 class BotScheduledPost(models.Model):
     objects = models.Manager()
 
-    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name="scheduled_posts")
     date = models.DateTimeField(auto_now_add=True)
     images_links = ArrayField(models.CharField(max_length=500))
     caption = models.TextField(blank=True)
