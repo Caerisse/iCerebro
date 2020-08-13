@@ -15,3 +15,4 @@ class RegisterForm(UserCreationForm):
 class BotSettingsForm(forms.ModelForm):
     class Meta:
         model = BotSettings
+        fields = '__all__'

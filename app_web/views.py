@@ -82,8 +82,8 @@ def bot_settings_view(request, username=None, settings_name=None):
         form_args['data'] = request.POST
         bot_settings_form = BotSettingsForm(**form_args)
         if bot_settings_form.is_valid():
-            bot_settings_form.save(commit=True)
-            return redirect("/bot/run/{}/".format(bot_settings_form.instauser.username))
+            bot_settings = bot_settings_form.save(commit=True)
+            return redirect("/bot/run/{}/".format(bot_settings.instauser.username))
         else:
             # TODO: Mark errors in form
             pass
