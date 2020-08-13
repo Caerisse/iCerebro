@@ -72,20 +72,19 @@ def bot_settings_view(request, username=None, settings_name=None):
         raise Http404("User does not exist")
     form_args = {}
     if username is not None and settings_name is not None:
-        if settings_name:
-            try:
-                bot_account = InstaUser.objects.get(username=username)
-                bot_settings = BotSettings.objects.get(icerebrouser=user, instauser=bot_account, name=settings_name)
-                form_args['instance'] = bot_settings
-            except ObjectDoesNotExist:
-                raise Http404("Bot does not exist")
+        try:
+            bot_account = InstaUser.objects.get(username=username)
+            bot_settings = BotSettings.objects.get(icerebrouser=user, instauser=bot_account, name=settings_name)
+            form_args['instance'] = bot_settings
+        except ObjectDoesNotExist:
+            raise Http404("Bot does not exist")
     if request.POST:
         form_args['data'] = request.POST
         bot_settings_form = BotSettingsForm(**form_args)
         if bot_settings_form.is_valid():
             bot_settings = bot_settings_form.save(commit=True)
             bot_settings.icerebrouser = user
-            bot_settings.instauser, _ = InstaUser.objects.get_or_create(username=bot_settings.instauser)
+            bot_settings.instauser, _ = InstaUser.objects.get_or_create(username=bot_settings.insta_username)
             bot_settings.save()
             return redirect("/bot/run/{}/".format(bot_settings.instauser.username))
     else:
