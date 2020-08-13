@@ -2,6 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+from app_db_logger.models import StatusLog
 
 from app_main.models import *
 from app_web.forms import *
@@ -65,12 +66,12 @@ def bots(request):
 
 @login_required
 def bot_settings_view(request, username=None, settings_name=None):
+    try:
+        user = ICerebroUser.objects.get(user=request.user)
+    except ObjectDoesNotExist:
+        raise Http404("User does not exist")
     form_args = {}
     if username is not None and settings_name is not None:
-        try:
-            user = ICerebroUser.objects.get(user=request.user)
-        except ObjectDoesNotExist:
-            raise Http404("User does not exist")
         if settings_name:
             try:
                 bot_account = InstaUser.objects.get(username=username)
@@ -83,10 +84,10 @@ def bot_settings_view(request, username=None, settings_name=None):
         bot_settings_form = BotSettingsForm(**form_args)
         if bot_settings_form.is_valid():
             bot_settings = bot_settings_form.save(commit=True)
+            bot_settings.icerebrouser = user
+            bot_settings.instauser, _ = InstaUser.objects.get_or_create(username=bot_settings.instauser)
+            bot_settings.save()
             return redirect("/bot/run/{}/".format(bot_settings.instauser.username))
-        else:
-            # TODO: Mark errors in form
-            pass
     else:
         bot_settings_form = BotSettingsForm(**form_args)
 
@@ -104,7 +105,11 @@ def bot_run(request, username):
         bot_settings_list = BotSettings.objects.filter(icerebrouser=user, instauser=bot_account)
     except ObjectDoesNotExist:
         raise Http404("Bot does not exist")
-    return render(request, 'bot_run.html', {'bot_settings_list': bot_settings_list})
+    bot_logs = StatusLog.objects.filter(bot_username=bot_account.instauser.username)[:10]
+    latest_logs = reversed(bot_logs)
+    return render(request, 'bot_run.html',
+                  {'bot_settings_list': bot_settings_list, 'latest_logs': latest_logs}
+                  )
 
 
 @login_required

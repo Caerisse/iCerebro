@@ -13,6 +13,9 @@ class RegisterForm(UserCreationForm):
 
 
 class BotSettingsForm(forms.ModelForm):
+    instauser = forms.TextInput()
+
     class Meta:
         model = BotSettings
         fields = '__all__'
+        exclude = ['icerebrouser', 'running']

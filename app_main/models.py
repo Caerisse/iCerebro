@@ -173,6 +173,8 @@ class BotSettings(models.Model):
     # TODO: encrypt
     password = models.TextField(blank=False)
 
+    running = models.BooleanField(default=False)
+
     page_delay = models.IntegerField(default=5, validators=[MinValueValidator(0)])
 
     use_proxy = models.BooleanField(default=False)
