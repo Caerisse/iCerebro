@@ -28,13 +28,12 @@ def user_settings(request):
     return render(request, 'user_settings.html', {'user': user})
 
 
-@login_required
 def user_subscriptions(request):
     try:
         user = ICerebroUser.objects.get(user=request.user)
+        return render(request, 'user_subscriptions.html', {'user': user})
     except ObjectDoesNotExist:
-        raise Http404("User does not exist")
-    return render(request, 'user_subscriptions.html', {'user': user})
+        return render(request, 'subscriptions.html')
 
 
 @login_required
@@ -43,7 +42,16 @@ def bots(request):
         user = ICerebroUser.objects.get(user=request.user)
     except ObjectDoesNotExist:
         raise Http404("User does not exist")
-    return render(request, 'bots.html', {'user': user})
+    bot_account_list = []
+    try:
+        bot_settings_list = BotSettings.objects.filter(icerebrouser=user)
+        for bot_settings in bot_settings_list:
+            if bot_settings.instauser not in bot_account_list:
+                bot_account_list.append(bot_settings.instauser)
+    except ObjectDoesNotExist:
+        pass
+        # User will have the option to register a new bot
+    return render(request, 'bots.html', {'bot_account_list': bot_account_list})
 
 
 @login_required

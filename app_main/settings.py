@@ -21,6 +21,9 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "app_main",
+    "app_db_logger",
+    "app_web",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -30,8 +33,6 @@ INSTALLED_APPS = [
     "django_fsm_log",
     "subscriptions.apps.SubscriptionsConfig",
     'multiselectfield',
-    "app_db_logger",
-    "app_web",
 ]
 
 MIDDLEWARE = [

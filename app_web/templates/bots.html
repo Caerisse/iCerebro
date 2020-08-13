@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+
+{% if bot_account_list %}
+<p>Your bots:</p>
+<ul>
+    {% for bot_account in bot_account_list %}
+        <li><a href="/bot/run/{{bot_account.username}}/">{{ bot_account.username }}</a></li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>Create new bot</p>
+{% endif %}
+
+{% endblock %}
