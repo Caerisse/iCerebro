@@ -77,8 +77,8 @@ class InstaUser(models.Model):
 class FollowRelation(models.Model):
     objects = models.Manager()
 
-    follower = models.ForeignKey(InstaUser, related_name='following', on_delete=models.CASCADE)
-    followed = models.ForeignKey(InstaUser, related_name='followers', on_delete=models.CASCADE)
+    follower = models.ForeignKey(InstaUser, related_name='follow_relations_is_follower', on_delete=models.CASCADE)
+    followed = models.ForeignKey(InstaUser, related_name='follow_relations_is_followed', on_delete=models.CASCADE)
 
     def __str__(self):
         return "Relationship: {} follows {}".format(self.follower.username, self.followed.username)
@@ -112,8 +112,8 @@ class Comment(models.Model):
     objects = models.Manager()
 
     date_posted = models.DateTimeField(null=False)
-    instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL, related_name='comments')
-    post = models.ForeignKey(Post, on_delete=models.SET_NULL, related_name='comments')
+    instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL, related_name='comments', null=True)
+    post = models.ForeignKey(Post, on_delete=models.SET_NULL, related_name='comments', null=True)
     text = models.TextField(blank=True)
 
     def __str__(self):
@@ -168,7 +168,7 @@ class BotSettings(models.Model):
     objects = models.Manager()
 
     icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE, related_name='bot_settings')
-    instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL, related_name='bot_settings')
+    instauser = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='bot_settings')
     name = models.TextField(blank=False)
     # TODO: encrypt
     password = models.TextField(blank=False)
@@ -215,8 +215,7 @@ class BotSettings(models.Model):
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)])
 
-    comments = ArrayField(models.TextField(blank=True), blank=True, null=True,
-                          default=["Cool!", "Nice!", "Looks good!"])
+    comments = ArrayField(models.TextField(blank=True), blank=True, null=True)
     photo_comments = ArrayField(models.TextField(blank=True), blank=True, null=True)
     video_comments = ArrayField(models.TextField(blank=True), blank=True, null=True)
     do_reply_to_comments = models.BooleanField(default=False)
