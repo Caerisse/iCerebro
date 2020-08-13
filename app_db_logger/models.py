@@ -1,6 +1,6 @@
 import logging
 from django.db import models
-from six import python_2_unicode_compatible
+# from six import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
 LOG_LEVELS = (
@@ -13,7 +13,7 @@ LOG_LEVELS = (
 )
 
 
-@python_2_unicode_compatible
+# @python_2_unicode_compatible
 class StatusLog(models.Model):
     logger_name = models.CharField(max_length=100)
     bot_username = models.CharField(max_length=100)

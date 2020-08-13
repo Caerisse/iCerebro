@@ -159,6 +159,7 @@ class BotSettings(models.Model):
 
     icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE)
     instauser = models.ForeignKey(InstaUser, on_delete=models.SET_NULL)
+    name = models.TextField(blank=False)
     # TODO: encrypt
     password = models.TextField(blank=False)
 
@@ -400,6 +401,8 @@ class BotSettings(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)],
         default=1.25, blank=True, null=True)
 
+    class Meta:
+        unique_together = ('instauser', 'name')
 
 class BotScheduledPost(models.Model):
     pass
