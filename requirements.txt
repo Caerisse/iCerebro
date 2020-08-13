@@ -5,6 +5,7 @@ django-heroku
 django-subscriptions
 dj-database-url
 django-multiselectfield
+django-crispy-forms
 selenium
 pyvirtualdisplay
 celery

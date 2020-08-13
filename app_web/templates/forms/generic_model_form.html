@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{# generic_model_form.html #}
+{% load modelform_title %}
+
+{% block content %}
+<h2>{% if object %}Update{% else %}Create{% endif %} {{ form|modelform_title }}</h2>
+<form action="" method="post">
+    {% csrf_token %}
+
+    {{ form }}
+
+    <button>Submit</button>
+</form>
+{% endblock %}

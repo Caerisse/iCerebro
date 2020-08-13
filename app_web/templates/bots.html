@@ -3,15 +3,12 @@
 
 {% block content %}
 
-{% if bot_account_list %}
 <p>Your bots:</p>
 <ul>
-    {% for bot_account in bot_account_list %}
-        <li><a href="/bot/run/{{bot_account.username}}/">{{ bot_account.username }}</a></li>
+    {% for bot in bot_settings_list %}
+        <li><a href="/bot/run/{{bot.instauser.username}}/">{{ bot.instauser.username }}</a></li>
     {% endfor %}
+    <li><a href="/bot/settings/">Create new bot</a></li>
 </ul>
-{% else %}
-<p>Create new bot</p>
-{% endif %}
 
 {% endblock %}

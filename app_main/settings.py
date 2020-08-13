@@ -18,6 +18,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# Forms template
+CRISPY_TEMPLATE_PACK = "bootstrap4"
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -33,6 +36,7 @@ INSTALLED_APPS = [
     "django_fsm_log",
     "subscriptions.apps.SubscriptionsConfig",
     'multiselectfield',
+    "crispy_forms",
 ]
 
 MIDDLEWARE = [
