@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 
 from app_main.models import *
-from forms import *
+from app_web.forms import *
 
 
 def index(request):
