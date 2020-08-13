@@ -1,4 +1,3 @@
-# selenium
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.keys import Keys
@@ -6,22 +5,18 @@ from selenium.webdriver.firefox.options import Options as Firefox_Options
 from selenium.webdriver import Remote
 from webdriverdownloader import GeckoDriverDownloader
 
-# general libs
 import os
 import zipfile
 import shutil
 from os.path import sep
+from time import sleep
 
-# local project
-from iCerebro.instapy.util import interruption_handler
-from iCerebro.instapy.util import highlight_print
-from iCerebro.instapy.util import emergency_exit
-from iCerebro.instapy.util import get_current_url
-from iCerebro.instapy.util import check_authorization
-from iCerebro.instapy.util import web_address_navigator
-from iCerebro.instapy.file_manager import use_assets
-from iCerebro.instapy.settings import Settings
-from .time_util import sleep
+from iCerebro.util import interruption_handler
+
+
+# TODO
+def use_assets():
+    return ""
 
 
 def get_geckodriver():
@@ -51,22 +46,9 @@ def create_firefox_extension():
 
 
 def set_selenium_local_session(
-    proxy_address,
-    proxy_port,
-    proxy_username,
-    proxy_password,
-    headless_browser,
-    browser_profile_path,
-    disable_image_load,
-    page_delay,
-    geckodriver_path,
-    logger,
+    self
 ):
-    """Starts local session for a selenium server.
-    Default case scenario."""
-
-    browser = None
-    err_msg = ""
+    """Starts local session for a selenium server."""
 
     # set Firefox Agent to mobile agent
     user_agent = (
@@ -74,65 +56,57 @@ def set_selenium_local_session(
         "(KHTML, like Gecko) FxiOS/18.1 Mobile/16B92 Safari/605.1.15"
     )
 
-    # keep user_agent
-    Settings.user_agent = user_agent
-
     firefox_options = Firefox_Options()
 
-    if headless_browser:
-        firefox_options.add_argument("-headless")
+    #if self.settings.headless_browser:
+    firefox_options.add_argument("-headless")
 
-    if browser_profile_path is not None:
-        firefox_profile = webdriver.FirefoxProfile(browser_profile_path)
-    else:
-        firefox_profile = webdriver.FirefoxProfile()
+    firefox_profile = webdriver.FirefoxProfile()
 
     # set English language
     firefox_profile.set_preference("intl.accept_languages", "en-US")
     firefox_profile.set_preference("general.useragent.override", user_agent)
 
-    if disable_image_load:
+    if self.settings.disable_image_load:
         # permissions.default.image = 2: Disable images load,
         # this setting can improve pageload & save bandwidth
         firefox_profile.set_preference("permissions.default.image", 2)
 
-    if proxy_address and proxy_port:
-        firefox_profile.set_preference("network.proxy.type", 1)
-        firefox_profile.set_preference("network.proxy.http", proxy_address)
-        firefox_profile.set_preference("network.proxy.http_port", int(proxy_port))
-        firefox_profile.set_preference("network.proxy.ssl", proxy_address)
-        firefox_profile.set_preference("network.proxy.ssl_port", int(proxy_port))
+    # TODO: check hoe this could work with django
+    # if self.settings.proxy_address and self.settings.proxy_port:
+    #     firefox_profile.set_preference("network.proxy.type", 1)
+    #     firefox_profile.set_preference("network.proxy.http", proxy_address)
+    #     firefox_profile.set_preference("network.proxy.http_port", int(proxy_port))
+    #     firefox_profile.set_preference("network.proxy.ssl", proxy_address)
+    #     firefox_profile.set_preference("network.proxy.ssl_port", int(proxy_port))
 
     # mute audio while watching stories
     firefox_profile.set_preference("media.volume_scale", "0.0")
 
-    # prefer user path before downloaded one
-    driver_path = geckodriver_path or get_geckodriver()
+    driver_path = get_geckodriver()
     browser = webdriver.Firefox(
         firefox_profile=firefox_profile,
         executable_path=driver_path,
         options=firefox_options,
     )
 
-    # add extenions to hide selenium
+    # add extensions to hide selenium
     browser.install_addon(create_firefox_extension(), temporary=True)
 
-    # converts to custom browser
-    # browser = convert_selenium_browser(browser)
-
     # authenticate with popup alert window
-    if proxy_username and proxy_password:
-        proxy_authentication(browser, logger, proxy_username, proxy_password)
+    # if self.settings.proxy_username and self.settings.proxy_password:
+    #     proxy_authentication(self)
 
-    browser.implicitly_wait(page_delay)
+    browser.implicitly_wait(self.settings.page_delay)
 
     # set mobile viewport (iPhone X)
     browser.set_window_size(375, 812)
 
-    message = "Session started!"
-    highlight_print("browser", message, "initialization", "info", logger)
+    self.logger.info(
+        "Selenium session started",
+        extra=self.extra)
 
-    return browser, err_msg
+    return browser
 
 
 def proxy_authentication(browser, logger, proxy_username, proxy_password):
@@ -249,47 +223,3 @@ def retry(max_retry_count=3, start_page=None):
 
     return real_decorator
 
-
-class custom_browser(Remote):
-    """ Custom browser instance for manupulation later on """
-
-    def find_element_by_xpath(self, *args, **kwargs):
-        """ example usage of hooking into built in functions """
-        rv = super(custom_browser, self).find_element_by_xpath(*args, **kwargs)
-        return rv
-
-    def wait_for_valid_connection(self, username, logger):
-        counter = 0
-        while True and counter < 10:
-            sirens_wailing, emergency_state = emergency_exit(self, username, logger)
-            if sirens_wailing and emergency_state == "not connected":
-                logger.warning("there is no valid connection")
-                counter += 1
-                sleep(60)
-            else:
-                break
-
-    def wait_for_valid_authorization(self, username, logger):
-        # save current page
-        current_url = get_current_url(self)
-
-        # stuck on invalid auth
-        auth_method = "activity counts"
-        counter = 0
-        while True and counter < 10:
-            login_state = check_authorization(self, username, auth_method, logger)
-            if login_state is False:
-                logger.warning("not logged in")
-                counter += 1
-                sleep(60)
-            else:
-                break
-
-        # return to original page
-        web_address_navigator(self, current_url)
-
-
-def convert_selenium_browser(driver):
-    """ Changed the class to our custom class """
-    driver.__class__ = custom_browser
-    return driver

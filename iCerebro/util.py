@@ -1,24 +1,11 @@
 import unicodedata
 from time import sleep, time
-import datetime
-from math import radians
-from math import degrees as rad2deg
-from math import cos
 import random
 import re
-from typing import List
+from typing import List, Tuple
 
-import regex
-import signal
-import os
-import sys
 from platform import system
 from subprocess import call
-import csv
-import json
-from contextlib import contextmanager
-import emoji
-from emoji.unicode_codes import UNICODE_EMOJI
 from selenium.webdriver.remote.webelement import WebElement
 
 from selenium.webdriver.support.ui import WebDriverWait
@@ -29,9 +16,12 @@ from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import TimeoutException
 
 import iCerebro.constants_x_paths as XP
+import iCerebro.constants_js_scripts as JS
 from iCerebro import ICerebro
-from iCerebro.instapy.event import Event
-from iCerebro.navigation import nf_click_center_of_element, web_address_navigator, get_current_url
+from iCerebro.navigation import nf_click_center_of_element, get_current_url, \
+    nf_go_from_post_to_profile, nf_find_and_press_back, go_to_bot_user_page, nf_go_to_user_page, nf_scroll_into_view, \
+    check_if_in_correct_page
+from iCerebro.util_db import store_user, is_in_blacklist
 
 default_profile_pic_instagram = [
     "https://instagram.flas1-2.fna.fbcdn.net/vp"
@@ -69,7 +59,7 @@ class Interactions:
             video_played=0,
             already_Visited=0,
             stories_watched=0,
-            reels_watched=0,
+            reels_watched=0
     ):
         self.liked_img = liked_img
         self.already_liked = already_liked
@@ -125,459 +115,534 @@ class Interactions:
         return string
 
 
-def is_private_profile(browser, logger, following=True):
-    is_private = None
+class Jumps:
+    def __init__(self):
+        self.likes = 0
+        self.comments = 0
+        self.follows = 0
+        self.unfollows = 0
+
+    def check_likes(self):
+        return self.likes >= 7
+
+    def check_comments(self):
+        return self.comments >= 3
+
+    def check_follows(self):
+        return self.likes >= 5
+
+    def check_unfollows(self):
+        return self.likes >= 4
+
+
+def nf_get_all_posts_on_element(
+        element: WebElement
+) -> List[WebElement]:
+    return element.find_elements_by_xpath(XP.POSTS_ON_ELEMENT)
+
+
+def nf_get_all_users_on_element(
+        self: ICerebro
+) -> List[WebElement]:
+    # return element.find_elements_by_xpath('//li/div/div[1]/div[2]/div[1]/a')
+    return self.browser.find_elements_by_xpath(XP.USERS_ON_ELEMENT)
+
+
+def nf_validate_user_call(
+        self: ICerebro,
+        username: str,
+        action: str,
+        post_link: str = None,
+) -> Tuple[bool, str]:
+    """Checks if user can be liked according to declared settings
+
+   Also stores user data in database if appropriate
+
+   :returns: valid, reason
+   """
+    followers_count = None
+    following_count = None
+    number_of_posts = None
+    if username == self.username:
+        return False, "Can not follow self"
+
+    if username in self.settings.ignore_users:
+        return False, "'{}' is in the 'ignore_users' list".format(username)
+
+    if is_in_blacklist(self, username, action):
+        return False, "'{}' is in the 'blacklist' for current campaign and action".format(username)
+
+    if not any(
+            [self.settings.potency_ratio,
+             self.settings.delimit_by_numbers,
+             self.settings.max_followers,
+             self.settings.max_following,
+             self.settings.min_followers,
+             self.settings.min_following,
+             self.settings.min_posts,
+             self.settings.max_posts,
+             self.settings.skip_private,
+             self.settings.skip_private_percentage,
+             self.settings.skip_no_profile_pic,
+             self.settings.skip_no_profile_pic_percentage,
+             self.settings.skip_business,
+             self.settings.skip_non_business,
+             self.settings.skip_business_percentage,
+             self.settings.skip_business_categories,
+             self.settings.skip_bio_keyword]
+    ):
+        # Nothing to check, skip going to user page and then back for nothing
+        return True, "Valid user"
+
     try:
-        is_private = browser.execute_script(
-            "return window.__additionalData[Object.keys(window.__additionalData)[0]]."
-            "data.graphql.user.is_private"
-        )
+        if post_link:
+            nf_go_from_post_to_profile(self, username)
+        self.logger.debug("Checking user page")
+        # Checks the potential of target user by relationship status in order
+        # to delimit actions within the desired boundary
+        if (
+                self.settings.potency_ratio
+                or self.settings.delimit_by_numbers
+                and (self.settings.max_followers or self.settings.max_following or
+                     self.settings.min_followers or self.settings.min_following)
+        ):
 
-    except WebDriverException:
-        try:
-            browser.execute_script("location.reload()")
-            update_activity(browser, state=None)
+            relationship_ratio = None
+            reverse_relationship = False
 
-            is_private = browser.execute_script(
-                "return window._sharedData.entry_data."
-                "ProfilePage[0].graphql.user.is_private"
+            # get followers & following counts
+            self.logger.debug("Getting relationship counts")
+            followers_count, following_count = get_relationship_counts(self, username)
+
+            potency_ratio = self.settings.potency_ratio if self.settings.potency_ratio else None
+            if self.settings.potency_ratio:
+                if self.settings.potency_ratio >= 0:
+                    potency_ratio = self.settings.potency_ratio
+                else:
+                    potency_ratio = -self.settings.potency_ratio
+                    reverse_relationship = True
+
+            # division by zero is bad
+            followers_count = 1 if followers_count == 0 else followers_count
+            following_count = 1 if following_count == 0 else following_count
+
+            if followers_count and following_count:
+                relationship_ratio = (
+                    float(followers_count) / float(following_count)
+                    if not reverse_relationship
+                    else float(following_count) / float(followers_count)
+                )
+
+            self.logger.info(
+                "User: '{}'  |> followers: {}  |> following: {}  |> relationship "
+                "ratio: {}".format(
+                    username,
+                    followers_count if followers_count else "unknown",
+                    following_count if following_count else "unknown",
+                    "{.2f}".format(relationship_ratio) if relationship_ratio else "unknown",
+                )
             )
 
-        except WebDriverException:
-            return None
+            if followers_count or following_count:
+                if potency_ratio and relationship_ratio and relationship_ratio < potency_ratio:
+                    return False, "Potency ratio not satisfied"
 
-    # double check with xpath that should work only when we not following a
-    # user
+                if self.settings.delimit_by_numbers:
+                    if followers_count:
+                        if self.settings.max_followers:
+                            if followers_count > self.settings.max_followers:
+                                return False, "'{}'s followers count exceeds " \
+                                              "maximum limit".format(username)
+
+                        if self.settings.min_followers:
+                            if followers_count < self.settings.min_followers:
+                                return False, "'{}'s followers count is less than " \
+                                              "minimum limit".format(username)
+
+                    if following_count:
+                        if self.settings.max_following:
+                            if following_count > self.settings.max_following:
+                                return False, "'{}'s following count exceeds " \
+                                              "maximum limit".format(username)
+
+                        if self.settings.min_following:
+                            if following_count < self.settings.min_following:
+                                return False, "'{}'s following count is less than " \
+                                              "minimum limit".format(username)
+
+        if self.settings.min_posts or self.settings.max_posts:
+            # if you are interested in relationship number of posts boundaries
+            try:
+                number_of_posts = get_number_of_posts(self)
+            except NoSuchElementException or WebDriverException:
+                self.logger.error("Couldn't get number of posts")
+                return False, "Couldn't get number of posts"
+
+            if self.settings.max_posts:
+                if number_of_posts > self.settings.max_posts:
+                    reason = (
+                        "Number of posts ({}) of '{}' exceeds the maximum limit "
+                        "given {}".format(number_of_posts, username, self.settings.max_posts)
+                    )
+                    return False, reason
+            if self.settings.min_posts:
+                if number_of_posts < self.settings.min_posts:
+                    reason = (
+                        "Number of posts ({}) of '{}' is less than the minimum "
+                        "limit given {}".format(number_of_posts, username, self.settings.min_posts)
+                    )
+                    return False, reason
+
+        # Skip users
+        # skip private
+        if self.settings.skip_private:
+            try:
+                self.browser.find_element_by_xpath(XP.IS_PRIVATE_PROFILE)
+                is_private = True
+            except NoSuchElementException:
+                is_private = False
+            if is_private and (random.randint(0, 100) <= self.settings.skip_private_percentage):
+                return False, "{} is private account, skipping".format(username)
+
+        # skip no profile pic
+        if self.settings.skip_no_profile_pic:
+            try:
+                profile_pic = get_user_data(self, JS.PROFILE_PIC)
+            except WebDriverException:
+                self.logger.error("Couldn't get profile picture")
+                return False, "Couldn't get profile picture"
+            if (
+                    (profile_pic in default_profile_pic_instagram
+                     or str(profile_pic).find("11906329_960233084022564_1448528159_a.jpg") > 0)
+                    and (random.randint(0, 100) <= self.settings.skip_no_profile_pic_percentage)
+            ):
+                return False, "{} has default instagram profile picture".format(username)
+
+        # skip business
+        if self.settings.skip_business or self.settings.skip_non_business:
+            # if is business account skip under conditions
+            try:
+                is_business_account = get_user_data(self, JS.BUSINESS_ACCOUNT)
+            except WebDriverException:
+                self.logger.error("Couldn't get if user is a business account")
+                return False, "Couldn't get if user is a business account",
+
+            if self.settings.skip_non_business and not is_business_account:
+                return False, "{} isn't a business account, skipping".format(username)
+
+            if is_business_account:
+                try:
+                    category = get_user_data(self, JS.BUSINESS_CATEGORY)
+                except WebDriverException:
+                    self.logger.error("Couldn't get business category")
+                    return False, "Couldn't get business category"
+
+                if category not in self.settings.dont_skip_business_categories:
+                    if category in self.settings.skip_business_categories:
+                        return (
+                            False,
+                            "'{}' is a business account in the undesired category of '{}'".format(
+                                username, category)
+                        )
+                    elif random.randint(0, 100) <= self.settings.skip_business_percentage:
+                        return False, "'{}' is business account, skipping".format(username)
+
+        if len(self.settings.skip_bio_keyword) != 0:
+            # if contain stop words then skip
+            try:
+                profile_bio = get_user_data(self, JS.BIOGRAPHY)
+            except WebDriverException:
+                self.logger.error("Couldn't get get user bio")
+                return False, "Couldn't get get user bio"
+            for bio_keyword in self.settings.skip_bio_keyword:
+                if bio_keyword.lower() in profile_bio.lower():
+                    return (
+                        False,
+                        "'{}' has a bio keyword '{}', skipping".format(
+                            username, bio_keyword
+                        ),
+                    )
+
+        # if everything is ok
+        return True, "Valid user"
+
+    except NoSuchElementException:
+        return False, "Unable to locate element"
+    finally:
+        store_user(username, followers_count, following_count, number_of_posts)
+        if post_link:
+            nf_find_and_press_back(self, post_link)
+
+
+def is_private_profile(
+        self: ICerebro,
+        following=True
+):
+    try:
+        is_private = get_user_data(self, JS.IS_PRIVATE)
+    except WebDriverException:
+        return None
+    # double check with xpath that should work only when we not following a user
     if is_private and not following:
-        logger.info("Is private account you're not following.")
-        body_elem = browser.find_element_by_tag_name("body")
-        is_private = body_elem.find_element_by_xpath(
-            read_xpath(is_private_profile.__name__, "is_private")
-        )
-
+        self.logger.info("Is private account you're not following.")
+        body_elem = self.browser.find_element_by_tag_name("body")
+        is_private = body_elem.find_element_by_xpath(XP.IS_PRIVATE)
     return is_private
 
 
-def getUserData(
-    query,
-    browser,
-    basequery="return window.__additionalData[Object.keys(window.__additionalData)[0]].data.",
-):
+def get_number_of_posts(self: ICerebro):
+    """Get the number of posts from the profile screen"""
+    num_of_posts = None
     try:
-        data = browser.execute_script(basequery + query)
-        return data
-    except WebDriverException:
-        browser.execute_script("location.reload()")
-        update_activity(browser, state=None)
-
-        data = browser.execute_script(
-            "return window._sharedData." "entry_data.ProfilePage[0]." + query
-        )
-        return data
-
-
-# TODO: rewrite
-def update_activity(
-    self, action="server_calls", state=None
-):
-    """
-        1. Record every Instagram server call (page load, content load, likes,
-        comments, follows, unfollow)
-        2. Take rotative screenshots
-        3. update connection state and record to .json file
-    """
-    pass
-    # # check action availability
-    # quota_supervisor("server_calls")
-    #
-    # # take screen shot
-    # if browser and logfolder and logger:
-    #     take_rotative_screenshot(browser, logfolder)
-    #
-    # # update state to JSON file
-    # if state and logfolder and logger:
-    #     try:
-    #         path = "{}state.json".format(logfolder)
-    #         data = {}
-    #         # check if file exists and has content
-    #         if os.path.isfile(path) and os.path.getsize(path) > 0:
-    #             # load JSON file
-    #             with open(path, "r") as json_file:
-    #                 data = json.load(json_file)
-    #
-    #         # update connection state
-    #         connection_data = {}
-    #         connection_data["connection"] = state
-    #         data["state"] = connection_data
-    #
-    #         # write to JSON file
-    #         with open(path, "w") as json_file:
-    #             json.dump(data, json_file, indent=4)
-    #     except Exception:
-    #         logger.warn("Unable to update JSON state file")
-    #
-    # # in case is just a state update and there is no server call
-    # if action is None:
-    #     return
-    #
-    # # get a DB, start a connection and sum a server call
-    # db, id = get_database()
-    # conn = sqlite3.connect(db)
-    #
-    # with conn:
-    #     conn.row_factory = sqlite3.Row
-    #     cur = conn.cursor()
-    #     # collect today data
-    #     cur.execute(
-    #         "SELECT * FROM recordActivity WHERE profile_id=:var AND "
-    #         "STRFTIME('%Y-%m-%d %H', created) == STRFTIME('%Y-%m-%d "
-    #         "%H', 'now', 'localtime')",
-    #         {"var": id},
-    #     )
-    #     data = cur.fetchone()
-    #
-    #     if data is None:
-    #         # create a new record for the new day
-    #         cur.execute(
-    #             "INSERT INTO recordActivity VALUES "
-    #             "(?, 0, 0, 0, 0, 1, STRFTIME('%Y-%m-%d %H:%M:%S', "
-    #             "'now', 'localtime'))",
-    #             (id,),
-    #         )
-    #
-    #     else:
-    #         # sqlite3.Row' object does not support item assignment -> so,
-    #         # convert it into a new dict
-    #         data = dict(data)
-    #
-    #         # update
-    #         data[action] += 1
-    #         quota_supervisor(action, update=True)
-    #
-    #         if action != "server_calls":
-    #             # always update server calls
-    #             data["server_calls"] += 1
-    #             quota_supervisor("server_calls", update=True)
-    #
-    #         sql = (
-    #             "UPDATE recordActivity set likes = ?, comments = ?, "
-    #             "follows = ?, unfollows = ?, server_calls = ?, "
-    #             "created = STRFTIME('%Y-%m-%d %H:%M:%S', 'now', "
-    #             "'localtime') "
-    #             "WHERE  profile_id=? AND STRFTIME('%Y-%m-%d %H', created) "
-    #             "== "
-    #             "STRFTIME('%Y-%m-%d %H', 'now', 'localtime')"
-    #         )
-    #
-    #         cur.execute(
-    #             sql,
-    #             (
-    #                 data["likes"],
-    #                 data["comments"],
-    #                 data["follows"],
-    #                 data["unfollows"],
-    #                 data["server_calls"],
-    #                 id,
-    #             ),
-    #         )
-    #
-    #     # commit the latest changes
-    #     conn.commit()
-
-
-# TODO: rewrite to use django db
-def add_user_to_blacklist(username, campaign, action, logger, logfolder):
-    file_exists = os.path.isfile("{}blacklist.csv".format(logfolder))
-    fieldnames = ["date", "username", "campaign", "action"]
-    today = datetime.date.today().strftime("%m/%d/%y")
-
-    try:
-        with open("{}blacklist.csv".format(logfolder), "a+") as blacklist:
-            writer = csv.DictWriter(blacklist, fieldnames=fieldnames)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(
-                {
-                    "date": today,
-                    "username": username,
-                    "campaign": campaign,
-                    "action": action,
-                }
-            )
-    except Exception as err:
-        logger.error("blacklist dictWrite error {}".format(err))
-
-    logger.info(
-        "--> {} added to blacklist for {} campaign (action: {})".format(
-            username, campaign, action
-        )
-    )
-
-
-# TODO: rewrite
-def get_active_users(browser, username, posts, boundary, logger):
-    """Returns a list with usernames who liked the latest n posts"""
-
-    user_link = "https://www.instagram.com/{}/".format(username)
-
-    # check URL of the webpage, if it already is user's profile page,
-    # then do not navigate to it again
-    web_address_navigator(browser, user_link)
-
-    try:
-        total_posts = browser.execute_script(
-            "return window._sharedData.entry_data."
-            "ProfilePage[0].graphql.user.edge_owner_to_timeline_media.count"
-        )
+        num_of_posts = get_user_data(self, JS.NUMBER_OF_POST)
     except WebDriverException:
         try:
-            topCount_elements = browser.find_elements_by_xpath(
-                read_xpath(get_active_users.__name__, "topCount_elements")
-            )
-
-            if topCount_elements:  # prevent an empty string scenario
-                total_posts = format_number(topCount_elements[0].text)
-            else:
-                logger.info(
-                    "Failed to get posts count on your profile!  ~empty " "string"
-                )
-                total_posts = None
+            num_of_posts_txt = self.browser.find_element_by_xpath(XP.NUM_OF_POSTS_TXT).text
         except NoSuchElementException:
-            logger.info("Failed to get posts count on your profile!")
-            total_posts = None
+            try:
+                num_of_posts_txt = self.browser.find_element_by_xpath(XP.NUM_OF_POSTS_TXT_NO_SUCH_ELEMENT).text
+            except NoSuchElementException:
+                num_of_posts_txt = None
+        if num_of_posts_txt:
+            num_of_posts_txt = num_of_posts_txt.replace(" ", "")
+            num_of_posts_txt = num_of_posts_txt.replace(",", "")
+            num_of_posts = int(num_of_posts_txt)
 
-    # if posts > total user posts, assume total posts
-    posts = (
-        posts if total_posts is None else total_posts if posts > total_posts else posts
-    )
+    return num_of_posts
 
-    active_users = []
-    sc_rolled = 0
+
+def get_user_data(
+        self: ICerebro,
+        query: str,
+        base_query: str = JS.BASE_QUERY_1,
+):
+    try:
+        data = self.browser.execute_script(base_query + query)
+    except WebDriverException:
+        self.browser.execute_script(JS.RELOAD)
+        self.quota_supervisor.add_server_call()
+        data = self.browser.execute_script(JS.BASE_QUERY_2 + query)
+    return data
+
+
+# TODO: rewrite so it uses less graphql
+def get_active_users(
+        self: ICerebro,
+        username: str,
+        posts_amount: int,
+        boundary: int = None
+):
+    """Returns a list with usernames who liked the latest n posts"""
     start_time = time()
-    too_many_requests = 0  # helps to prevent misbehaviours when requests
-    # list of active users repeatedly within less than 10 min of breaks
+    user_link = "https://www.instagram.com/{}/".format(username)
+    if not check_if_in_correct_page(self, user_link):
+        if username == self.username:
+            go_to_bot_user_page(self)
+        else:
+            nf_go_to_user_page(self, username)
+
+    total_posts = get_number_of_posts(self)
+
+    if total_posts and posts_amount > total_posts:
+        posts_amount = total_posts
 
     message = (
-        "~collecting the entire usernames from posts without a boundary!\n"
-        if boundary is None
-        else "~collecting only the visible usernames from posts without scrolling "
-        "at the boundary of zero..\n"
-        if boundary == 0
-        else "~collecting the usernames from posts with the boundary of {}"
-        "\n".format(boundary)
+        "without boundary (all users)" if boundary is None
+        else "using only the visible usernames from posts without scrolling" if boundary == 0
+        else "with a maximum of {} per post".format(boundary)
     )
     # posts argument is the number of posts to collect usernames
-    logger.info(
-        "Getting active users who liked the latest {} posts:\n  {}".format(
-            posts, message
-        )
+    self.logger.info(
+        "Getting active users who liked the latest {} posts {}".format(posts_amount, message)
     )
-
-    count = 1
-    checked_posts = 0
-    while count <= posts:
-        # load next post
-        try:
-            latest_post = browser.find_element_by_xpath(
-                read_xpath(get_active_users.__name__, "profile_posts").format(count)
+    active_users = []
+    already_checked_links = []
+    sc_rolled = 0
+    count = 0
+    while count <= posts_amount:
+        if sc_rolled > 90:
+            delay_random = random.randint(400, 600)
+            self.logger.info(
+                "Scrolled too much. Sleeping {} minutes and {} seconds".format(
+                    int(delay_random / 60),
+                    delay_random % 60
+                )
             )
-            # avoid no posts
-            if latest_post:
-                nf_click_center_of_element(browser, latest_post)
-        except (NoSuchElementException, WebDriverException):
-            logger.warning("Failed to click on the latest post to grab active likers!")
-            return []
-        try:
-            checked_posts += 1
-            sleep(2)
-
-            try:
-                likers_count = browser.find_element_by_xpath(
-                    read_xpath(get_active_users.__name__, "likers_count")
-                ).text
-                if likers_count:  # prevent an empty string scenarios
-                    likers_count = format_number(likers_count)
-                    # liked by 'username' AND 165 others (166 in total)
-                    likers_count += 1
-                else:
-                    logger.info(
-                        "Failed to get likers count on your post {}  "
-                        "~empty string".format(count)
+            sc_rolled = 0
+        main_elem = self.browser.find_element_by_tag_name("main")
+        posts = nf_get_all_posts_on_element(main_elem)
+        for post in posts:
+            link = post.get_attribute("href")
+            if link not in already_checked_links:
+                sleep(1)
+                nf_scroll_into_view(self, post)
+                sleep(1)
+                nf_click_center_of_element(self, post, link)
+                success, active_users_for_post = get_likers(self, link, boundary)
+                if success:
+                    count += 1
+                    self.logger.info(
+                        "Post {} - Likers recorded: {}".format(
+                            count, len(active_users_for_post)
+                        )
                     )
-                    likers_count = None
-            except NoSuchElementException:
-                logger.info("Failed to get likers count on your post {}".format(count))
-                likers_count = None
-            try:
-                likes_button = browser.find_elements_by_xpath(
-                    read_xpath(get_active_users.__name__, "likes_button")
-                )
-
-                if likes_button != []:
-                    if likes_button[1] is not None:
-                        likes_button = likes_button[1]
-                    else:
-                        likes_button = likes_button[0]
-                    nf_click_center_of_element(browser, likes_button)
-                    sleep(3)
-                else:
-                    raise NoSuchElementException
-
-            except (IndexError, NoSuchElementException):
-                # Video have no likes button / no posts in page
-                logger.info("video found, try next post until we run out of posts")
-
-                # edge case of account having only videos,  or last post is a video.
-                if checked_posts >= total_posts:
-                    break
-                # if not reached posts(parameter) value, continue (but load next post)
-                browser.back()
-                # go to next post
-                count += 1
-                continue
-
-            # get a reference to the 'Likes' dialog box
-            dialog = browser.find_element_by_xpath(
-                read_xpath("class_selectors", "likes_dialog_body_xpath")
-            )
-
-            scroll_it = True
-            try_again = 0
-            start_time = time.time()
-            user_list = []
-
-            if likers_count:
-                amount = (
-                    likers_count
-                    if boundary is None
-                    else None
-                    if boundary == 0
-                    else (boundary if boundary < likers_count else likers_count)
-                )
-            else:
-                amount = None
-            tmp_scroll_height = 0
-            user_list_len = -1
-            while scroll_it is not False and boundary != 0:
-                scroll_height = browser.execute_script(
-                    """
-                    let main = document.getElementsByTagName('main')
-                    return main[0].scrollHeight
-                    """
-                )
-                # check if it should keep scrolling down or exit
-                if (
-                    scroll_height >= tmp_scroll_height
-                    and len(user_list) > user_list_len
-                ):
-                    tmp_scroll_height = scroll_height
-                    user_list_len = len(user_list)
-                    scroll_it = True
-                else:
-                    scroll_it = False
-
-                if scroll_it is True:
-                    scroll_it = browser.execute_script("window.scrollBy(0, 1000)")
-                    update_activity(browser, state=None)
-
-                if sc_rolled > 91 or too_many_requests > 1:  # old value 100
-                    print("\n")
-                    logger.info("Too Many Requests sent! ~will sleep some :>\n")
-                    sleep(600)
-                    sc_rolled = 0
-                    too_many_requests = (
-                        0 if too_many_requests >= 1 else too_many_requests
-                    )
-
-                else:
-                    sleep(1.2)  # old value 5.6
-                    sc_rolled += 1
-
-                user_list = get_users_from_dialog(user_list, dialog)
-
-                # write & update records at Progress Tracker
-                if amount:
-                    progress_tracker(len(user_list), amount, start_time, None)
-
-                if boundary is not None:
-                    if len(user_list) >= boundary:
-                        break
-
-                if (
-                    scroll_it is False
-                    and likers_count
-                    and likers_count - 1 > len(user_list)
-                ):
-
-                    if (
-                        boundary is not None and likers_count - 1 > boundary
-                    ) or boundary is None:
-
-                        if try_again <= 1:  # can increase the amount of tries
-                            logger.info(
-                                "Failed to get the desired amount of "
-                                "usernames but trying again.."
-                                "\t|> post:{}  |> attempt: {}\n".format(
-                                    posts, try_again + 1
-                                )
-                            )
-                            try_again += 1
-                            too_many_requests += 1
-                            scroll_it = True
-                            nap_it = 4 if try_again == 0 else 7
-                            sleep(nap_it)
-
-            user_list = get_users_from_dialog(user_list, dialog)
-
-            logger.info(
-                "Post {}  |  Likers: found {}, catched {}\n\n".format(
-                    count, likers_count, len(user_list)
-                )
-            )
-        except NoSuchElementException as exc:
-            logger.error(
-                "Ku-ku! There is an error searching active users"
-                "~\t{}\n\n".format(str(exc).encode("utf-8"))
-            )
-
-        for user in user_list:
-            active_users.append(user)
-
-        sleep(1)
-
-        # if not reached posts(parameter) value, continue
-        if count != posts + 1:
-            try:
-                # click close button
-                close_dialog_box(browser)
-                browser.back()
-            except Exception:
-                logger.error("Unable to go to next profile post")
-        count += 1
-
-    real_time = time.time()
-    diff_in_minutes = int((real_time - start_time) / 60)
-    diff_in_seconds = int((real_time - start_time) % 60)
-
+                    for user in active_users_for_post:
+                        active_users.append(user)
+                sleep(1)
+                close_dialog_box(self)
+                self.browser.back()
+                # nf_find_and_press_back(self, user_link)
+                already_checked_links.append(link)
+                break
+        else:
+            # For loop ended means all posts in screen has been interacted with
+            # will scroll the screen a bit and reload
+            for i in range(3):
+                self.browser.execute_script(JS.SCROLL_SCREEN)
+                self.quota_supervisor.add_server_call()
+                sc_rolled += 1
+                sleep(3)
+    time_taken = time() - start_time
     # delete duplicated users
     active_users = list(set(active_users))
-
-    logger.info(
-        "Gathered total of {} unique active followers from the latest {} "
+    self.logger.info(
+        "Gathered a total of {} unique active followers from the latest {} "
         "posts in {} minutes and {} seconds".format(
-            len(active_users), posts, diff_in_minutes, diff_in_seconds
+            len(active_users),
+            count,
+            int(time_taken / 60),
+            time_taken % 60
         )
     )
-
     return active_users
 
 
-def get_users_from_dialog(old_data, dialog):
+def get_likers(
+        self: ICerebro,
+        link: str,
+        boundary: int = None
+) -> Tuple[bool, list]:
+    try:
+        likers_count = self.browser.find_element_by_xpath(XP.LIKERS_COUNT).text
+        if likers_count:  # prevent an empty string scenarios
+            likers_count = format_number(likers_count)
+            # liked by 'username' AND 165 others (166 in total)
+            likers_count += 1
+        else:
+            self.logger.info("Failed to get likers count for post {}".format(link))
+            likers_count = None
+    except NoSuchElementException:
+        self.logger.info("Failed to get likers count for post {}".format(link))
+        likers_count = None
+
+    try:
+        likes_button = self.browser.find_elements_by_xpath(XP.LIKES_BUTTON)
+        if likes_button:
+            if likes_button[1] is not None:
+                likes_button = likes_button[1]
+            else:
+                likes_button = likes_button[0]
+            # TODO: check if link should change
+            nf_click_center_of_element(self, likes_button)
+            sleep(3)
+        else:
+            return False, []
+    except (IndexError, NoSuchElementException):
+        return False, []
+
+    # get a reference to the 'Likes' dialog box
+    dialog = self.browser.find_element_by_xpath(XP.LIKES_DIALOG_BODY_XPATH)
+    scroll_it = True
+    try_again = 0
+    user_list = []
+    sc_rolled = 0
+    too_many_requests = 0
+
+    if likers_count:
+        amount = (
+            likers_count
+            if boundary is None
+            else None
+            if boundary == 0
+            else (boundary if boundary < likers_count else likers_count)
+        )
+    else:
+        amount = None
+    tmp_scroll_height = 0
+    user_list_len = -1
+    while scroll_it is not False and boundary != 0:
+        scroll_height = self.browser.execute_script(JS.GET_SCROLL_HEIGHT)
+        # check if it should keep scrolling down or exit
+        if (
+                scroll_height >= tmp_scroll_height
+                and len(user_list) > user_list_len
+        ):
+            tmp_scroll_height = scroll_height
+            user_list_len = len(user_list)
+            scroll_it = True
+        else:
+            scroll_it = False
+
+        if scroll_it is True:
+            scroll_it = self.browser.execute_script(JS.SCROLL_1000)
+            self.quota_supervisor.add_server_call()
+
+        if sc_rolled > 90 or too_many_requests > 1:
+            delay_random = random.randint(400, 600)
+            self.logger.info(
+                "Too many requests sent. Sleeping {} minutes and {} seconds".format(
+                    int(delay_random / 60),
+                    delay_random % 60
+                )
+            )
+            sc_rolled = 0
+            too_many_requests = (
+                0 if too_many_requests >= 1 else too_many_requests
+            )
+        else:
+            sleep(1.2)  # old value 5.6
+            sc_rolled += 1
+
+        try:
+            user_list = get_users_from_dialog(user_list, dialog)
+        except NoSuchElementException:
+            self.logger.error("Error while searching for active users")
+            return False, []
+
+        if boundary is not None:
+            if len(user_list) >= boundary:
+                break
+
+        if (
+                scroll_it is False
+                and likers_count
+                and likers_count - 1 > len(user_list)
+        ):
+
+            if (
+                    boundary is not None and likers_count - 1 > boundary
+            ) or boundary is None:
+
+                if try_again <= 1:  # can increase the amount of tries
+                    try_again += 1
+                    too_many_requests += 1
+                    scroll_it = True
+                    nap_it = 4 if try_again == 0 else 7
+                    sleep(nap_it)
+
+    try:
+        user_list = get_users_from_dialog(user_list, dialog)
+        return True, user_list
+    except NoSuchElementException:
+        self.logger.error("Error while searching for active users")
+        return False, []
+
+
+def get_users_from_dialog(old_data: list, dialog: WebElement):
     """
     Prepared to work specially with the dynamic data load in the 'Likes'
     dialog box
     """
-
     user_blocks = dialog.find_elements_by_tag_name("a")
     loaded_users = [
         extract_text_from_element(u)
@@ -590,7 +655,16 @@ def get_users_from_dialog(old_data, dialog):
     return new_data
 
 
-def extract_text_from_element(elem):
+def close_dialog_box(self: ICerebro):
+    """ Click on the close button spec. in the 'Likes' dialog box """
+    try:
+        close = self.browser.find_element_by_xpath(XP.LIKES_DIALOG_CLOSE_XPATH)
+        nf_click_center_of_element(self, close, get_current_url(self.browser))
+    except NoSuchElementException:
+        pass
+
+
+def extract_text_from_element(elem: WebElement):
     """ As an element is valid and contains text, extract it and return """
     if elem and hasattr(elem, "text") and elem.text:
         text = elem.text
@@ -637,164 +711,91 @@ def format_number(number):
     return int(formatted_num)
 
 
-def get_number_of_posts(browser):
-    """Get the number of posts from the profile screen"""
-    try:
-        num_of_posts = getUserData(
-            "graphql.user.edge_owner_to_timeline_media.count", browser
-        )
-    except WebDriverException:
-        try:
-            num_of_posts_txt = browser.find_element_by_xpath(
-                read_xpath(get_number_of_posts.__name__, "num_of_posts_txt")
-            ).text
-
-        except NoSuchElementException:
-            num_of_posts_txt = browser.find_element_by_xpath(
-                read_xpath(
-                    get_number_of_posts.__name__, "num_of_posts_txt_no_such_element"
-                )
-            ).text
-
-        num_of_posts_txt = num_of_posts_txt.replace(" ", "")
-        num_of_posts_txt = num_of_posts_txt.replace(",", "")
-        num_of_posts = int(num_of_posts_txt)
-
-    return num_of_posts
-
-
-def get_relationship_counts(browser, username, logger):
+def get_relationship_counts(self, username):
     """ Gets the followers & following counts of a given user """
 
     user_link = "https://www.instagram.com/{}/".format(username)
 
-    # check URL of the webpage, if it already is user's profile page,
-    # then do not navigate to it again
-    web_address_navigator(browser, user_link)
+    if not check_if_in_correct_page(self, user_link):
+        if username == self.username:
+            go_to_bot_user_page(self)
+        else:
+            nf_go_to_user_page(self, username)
 
     try:
-        followers_count = browser.execute_script(
-            "return window._sharedData.entry_data."
-            "ProfilePage[0].graphql.user.edge_followed_by.count"
-        )
-
+        followers_count = get_user_data(self, JS.FOLLOWERS_COUNT)
     except WebDriverException:
         try:
-            followers_count = format_number(
-                browser.find_element_by_xpath(
-                    str(read_xpath(get_relationship_counts.__name__, "followers_count"))
-                ).text
-            )
+            followers_count = format_number(self.browser.find_element_by_xpath(XP.FOLLOWERS_COUNT).text)
         except NoSuchElementException:
             try:
-                browser.execute_script("location.reload()")
-                update_activity(browser, state=None)
-
-                followers_count = browser.execute_script(
-                    "return window._sharedData.entry_data."
-                    "ProfilePage[0].graphql.user.edge_followed_by.count"
-                )
-
+                self.browser.execute_script(JS.RELOAD)
+                self.quota_supervisor.add_server_call()
+                followers_count = get_user_data(self, JS.FOLLOWERS_COUNT)
             except WebDriverException:
                 try:
-                    topCount_elements = browser.find_elements_by_xpath(
-                        read_xpath(
-                            get_relationship_counts.__name__, "topCount_elements"
-                        )
-                    )
-
-                    if topCount_elements:
-                        followers_count = format_number(topCount_elements[1].text)
-
+                    top_count_elements = self.browser.find_elements_by_xpath(XP.TOP_COUNT_ELEMENTS)
+                    if top_count_elements:
+                        followers_count = format_number(top_count_elements[1].text)
                     else:
-                        logger.info(
-                            "Failed to get followers count of '{}'  ~empty "
-                            "list".format(username.encode("utf-8"))
+                        self.logger.info(
+                            "Failed to get followers count of '{}'".format(username.encode("utf-8"))
                         )
                         followers_count = None
-
                 except NoSuchElementException:
-                    logger.error(
-                        "Error occurred during getting the followers count "
-                        "of '{}'\n".format(username.encode("utf-8"))
+                    self.logger.error(
+                        "Error occurred while getting followers count "
+                        "of '{}'".format(username.encode("utf-8"))
                     )
                     followers_count = None
 
     try:
-        following_count = browser.execute_script(
-            "return window._sharedData.entry_data."
-            "ProfilePage[0].graphql.user.edge_follow.count"
-        )
-
+        following_count = get_user_data(self, JS.FOLLOWING_COUNT)
     except WebDriverException:
         try:
             following_count = format_number(
-                browser.find_element_by_xpath(
-                    str(read_xpath(get_relationship_counts.__name__, "following_count"))
-                ).text
+                self.browser.find_element_by_xpath(XP.FOLLOWING_COUNT)
             )
-
         except NoSuchElementException:
             try:
-                browser.execute_script("location.reload()")
-                update_activity(browser, state=None)
-
-                following_count = browser.execute_script(
-                    "return window._sharedData.entry_data."
-                    "ProfilePage[0].graphql.user.edge_follow.count"
-                )
-
+                self.browser.execute_script(JS.RELOAD)
+                self.quota_supervisor.add_server_call()
+                following_count = get_user_data(self, JS.FOLLOWING_COUNT)
             except WebDriverException:
                 try:
-                    topCount_elements = browser.find_elements_by_xpath(
-                        read_xpath(
-                            get_relationship_counts.__name__, "topCount_elements"
-                        )
-                    )
-
-                    if topCount_elements:
-                        following_count = format_number(topCount_elements[2].text)
-
+                    top_count_elements = self.browser.find_elements_by_xpath(XP.TOP_COUNT_ELEMENTS)
+                    if top_count_elements:
+                        following_count = format_number(top_count_elements[2].text)
                     else:
-                        logger.info(
-                            "Failed to get following count of '{}'  ~empty "
-                            "list".format(username.encode("utf-8"))
+                        self.logger.info(
+                            "Failed to get following count of '{}'".format(username.encode("utf-8"))
                         )
                         following_count = None
-
-                except (NoSuchElementException, IndexError):
-                    logger.error(
-                        "\nError occurred during getting the following count "
-                        "of '{}'\n".format(username.encode("utf-8"))
+                except NoSuchElementException:
+                    self.logger.error(
+                        "Error occurred while getting following count "
+                        "of '{}'".format(username.encode("utf-8"))
                     )
                     following_count = None
-
-    Event().profile_data_updated(username, followers_count, following_count)
+    # TODO: update in database
     return followers_count, following_count
 
 
-@contextmanager
-def interruption_handler(
-    threaded=False,
-    SIG_type=signal.SIGINT,
-    handler=signal.SIG_IGN,
-    notify=None,
-    logger=None,
-):
-    """ Handles external interrupt, usually initiated by the user like
-    KeyboardInterrupt with CTRL+C """
-    if notify is not None and logger is not None:
-        logger.warning(notify)
+def emergency_exit(self: ICerebro):
+    """ Raise emergency if the is no connection to server OR if user is not
+    logged in """
+    server_address = "instagram.com"
+    connection_state = ping_server(server_address, self.logger)
+    if connection_state is False:
+        return True, "not connected"
 
-    if not threaded:
-        original_handler = signal.signal(SIG_type, handler)
+    # check if the user is logged in
+    auth_method = "activity counts"
+    login_state = check_authorization(self, auth_method)
+    if login_state is False:
+        return True, "not logged in"
 
-    try:
-        yield
-
-    finally:
-        if not threaded:
-            signal.signal(SIG_type, original_handler)
+    return False, "no emergency"
 
 
 def ping_server(host, logger):
@@ -834,215 +835,36 @@ def ping_server(host, logger):
     return True
 
 
-def emergency_exit(browser, username, logger):
-    """ Raise emergency if the is no connection to server OR if user is not
-    logged in """
-    server_address = "instagram.com"
-    connection_state = ping_server(server_address, logger)
-    if connection_state is False:
-        return True, "not connected"
-
-    # check if the user is logged in
-    auth_method = "activity counts"
-    login_state = check_authorization(browser, username, auth_method, logger)
-    if login_state is False:
-        return True, "not logged in"
-
-    return False, "no emergency"
-
-
-def check_authorization(browser, username, method, logger, notify=True):
-    """ Check if user is NOW logged in """
-    if notify is True:
-        logger.info("Checking if '{}' is logged in...".format(username))
-
-    # different methods can be added in future
-    if method == "activity counts":
-
-        # navigate to owner's profile page only if it is on an unusual page
-        current_url = get_current_url(browser)
-        if (
-            not current_url
-            or "https://www.instagram.com" not in current_url
-            or "https://www.instagram.com/graphql/" in current_url
-        ):
-            profile_link = "https://www.instagram.com/{}/".format(username)
-            web_address_navigator(browser, profile_link)
-
-        # if user is not logged in, `activity_counts` will be `None`- JS `null`
-        try:
-            activity_counts = browser.execute_script(
-                "return window._sharedData.activity_counts"
-            )
-
-        except WebDriverException:
-            try:
-                browser.execute_script("location.reload()")
-                update_activity(browser, state=None)
-
-                activity_counts = browser.execute_script(
-                    "return window._sharedData.activity_counts"
-                )
-
-            except WebDriverException:
-                activity_counts = None
-
-        # if user is not logged in, `activity_counts_new` will be `None`- JS
-        # `null`
-        try:
-            activity_counts_new = browser.execute_script(
-                "return window._sharedData.config.viewer"
-            )
-
-        except WebDriverException:
-            try:
-                browser.execute_script("location.reload()")
-                activity_counts_new = browser.execute_script(
-                    "return window._sharedData.config.viewer"
-                )
-
-            except WebDriverException:
-                activity_counts_new = None
-
-        if activity_counts is None and activity_counts_new is None:
-            if notify is True:
-                logger.critical("--> '{}' is not logged in!\n".format(username))
-            return False
-
-    return True
-
-
-def get_username_by_js_query(browser, track, logger):
-    """ Get the username of a user from the loaded profile page """
-    if track == "profile":
-        query = "return window._sharedData.entry_data. \
-                    ProfilePage[0].graphql.user.username"
-
-    elif track == "post":
-        query = "return window._sharedData.entry_data. \
-                    PostPage[0].graphql.shortcode_media.owner.username"
-
-    try:
-        username = browser.execute_script(query)
-
-    except WebDriverException:
-        try:
-            browser.execute_script("location.reload()")
-            update_activity(browser, state=None)
-
-            username = browser.execute_script(query)
-
-        except WebDriverException:
-            current_url = get_current_url(browser)
-            logger.info(
-                "Failed to get the username from '{}' page".format(
-                    current_url or "user" if track == "profile" else "post"
-                )
-            )
-            username = None
-
-    # in future add XPATH ways of getting username
-
-    return username
-
-
-def find_user_id(browser, track, username, logger):
-    """  Find the user ID from the loaded page """
-    if track in ["dialog", "profile"]:
-        query = "return window.__additionalData[Object.keys(window.__additionalData)[0]].data.graphql.user.id"
-
-    elif track == "post":
-        query = (
-            "return window._sharedData.entry_data.PostPage["
-            "0].graphql.shortcode_media.owner.id"
-        )
-        meta_XP = read_xpath(find_user_id.__name__, "meta_XP")
-
-    failure_message = "Failed to get the user ID of '{}' from {} page!".format(
-        username, track
-    )
-
-    try:
-        user_id = browser.execute_script(query)
-
-    except WebDriverException:
-        try:
-            browser.execute_script("location.reload()")
-            update_activity(browser, state=None)
-
-            user_id = browser.execute_script(
-                "return window._sharedData."
-                "entry_data.ProfilePage[0]."
-                "graphql.user.id"
-            )
-
-        except WebDriverException:
-            if track == "post":
-                try:
-                    user_id = browser.find_element_by_xpath(meta_XP).get_attribute(
-                        "content"
-                    )
-                    if user_id:
-                        user_id = format_number(user_id)
-
-                    else:
-                        logger.error("{}\t~empty string".format(failure_message))
-                        user_id = None
-
-                except NoSuchElementException:
-                    logger.error(failure_message)
-                    user_id = None
-
-            else:
-                logger.error(failure_message)
-                user_id = None
-
-    return user_id
-
-
-@contextmanager
-def new_tab(browser):
-    """ USE once a host tab must remain untouched and yet needs extra data-
-    get from guest tab """
-    try:
-        # add a guest tab
-        browser.execute_script("window.open()")
-        sleep(1)
-        # switch to the guest tab
-        browser.switch_to.window(browser.window_handles[1])
-        sleep(2)
-        yield
-
-    finally:
-        # close the guest tab
-        browser.execute_script("window.close()")
-        sleep(1)
-        # return to the host tab
-        browser.switch_to.window(browser.window_handles[0])
-        sleep(2)
-
-
-def explicit_wait(browser, track, ec_params, logger, timeout=35, notify=True):
+def explicit_wait(self: ICerebro, track, ec_params, timeout=35, notify=True):
     """
     Explicitly wait until expected condition validates
 
-    :param browser: webdriver instance
+    :param self: iCerebro instance
     :param track: short name of the expected condition
     :param ec_params: expected condition specific parameters - [param1, param2]
-    :param logger: the logger instance
+    :param timeout:
+    :param notify:
+
+    list of expected condition:
+        <https://seleniumhq.github.io/selenium/docs/api/py/webdriver_support/selenium.webdriver.support.expected_conditions.html>
     """
-    # list of available tracks:
-    # <https://seleniumhq.github.io/selenium/docs/api/py/webdriver_support/
-    # selenium.webdriver.support.expected_conditions.html>
+
+    VOEL = "VOEL"
+    TC = "TC"
+    PFL = "PFL"
+    SO = "SO"
+    tracks = {VOEL, TC, PFL, SO}
+    if track not in tracks:
+        raise ValueError(
+            "explicit_wait: track must be one of %r." % tracks)
 
     if not isinstance(ec_params, list):
         ec_params = [ec_params]
 
     # find condition according to the tracks
-    if track == "VOEL":
+    if track == VOEL:
         elem_address, find_method = ec_params
         ec_name = "visibility of element located"
-
         find_by = (
             By.XPATH
             if find_method == "XPath"
@@ -1052,424 +874,73 @@ def explicit_wait(browser, track, ec_params, logger, timeout=35, notify=True):
         )
         locator = (find_by, elem_address)
         condition = ec.visibility_of_element_located(locator)
-
-    elif track == "TC":
+    elif track == TC:
         expect_in_title = ec_params[0]
         ec_name = "title contains '{}' string".format(expect_in_title)
-
         condition = ec.title_contains(expect_in_title)
-
-    elif track == "PFL":
+    elif track == PFL:
         ec_name = "page fully loaded"
         condition = lambda browser: browser.execute_script(
             "return document.readyState"
         ) in ["complete" or "loaded"]
-
-    elif track == "SO":
+    elif track == SO:
         ec_name = "staleness of"
         element = ec_params[0]
 
         condition = ec.staleness_of(element)
+    else:
+        return False
 
     # generic wait block
     try:
-        wait = WebDriverWait(browser, timeout)
+        wait = WebDriverWait(self.browser, timeout)
         result = wait.until(condition)
-
     except TimeoutException:
         if notify is True:
-            logger.info(
-                "Timed out with failure while explicitly waiting until {}!\n".format(
-                    ec_name
-                )
+            self.logger.info(
+                "Timed out with failure while explicitly waiting until {}".format(ec_name)
             )
         return False
-
     return result
 
 
-def get_username_from_id(browser, user_id, logger):
-    """ Convert user ID to username """
-    # method using graphql 'Account media' endpoint
-    logger.info("Trying to find the username from the given user ID by loading a post")
-
-    query_hash = "42323d64886122307be10013ad2dcc44"  # earlier-
-    # "472f257a40c653c64c666ce877d59d2b"
-    graphql_query_URL = (
-        "https://www.instagram.com/graphql/query/?query_hash" "={}".format(query_hash)
-    )
-    variables = {"id": str(user_id), "first": 1}
-    post_url = "{}&variables={}".format(graphql_query_URL, str(json.dumps(variables)))
-
-    web_address_navigator(browser, post_url)
-    try:
-        pre = browser.find_element_by_tag_name("pre").text
-    except NoSuchElementException:
-        logger.info("Encountered an error to find `pre` in page, skipping username.")
-        return None
-    user_data = json.loads(pre)["data"]["user"]
-
-    if user_data:
-        user_data = user_data["edge_owner_to_timeline_media"]
-
-        if user_data["edges"]:
-            post_code = user_data["edges"][0]["node"]["shortcode"]
-            post_page = "https://www.instagram.com/p/{}".format(post_code)
-
-            web_address_navigator(browser, post_page)
-            username = get_username_by_js_query(browser, "post", logger)
-            if username:
-                return username
-
-        else:
-            if user_data["count"] == 0:
-                logger.info("Profile with ID {}: no pics found".format(user_id))
-
-            else:
-                logger.info(
-                    "Can't load pics of a private profile to find username ("
-                    "ID: {})".format(user_id)
-                )
-
-    else:
-        logger.info(
-            "No profile found, the user may have blocked you (ID: {})".format(user_id)
-        )
-        return None
-
-    """  method using private API
-    #logger.info("Trying to find the username from the given user ID by a
-    quick API call")
-
-    #req = requests.get(u"https://i.instagram.com/api/v1/users/{}/info/"
-    #                   .format(user_id))
-    #if req:
-    #    data = json.loads(req.text)
-    #    if data["user"]:
-    #        username = data["user"]["username"]
-    #        return username
-    """
-
-    """ Having a BUG (random log-outs) with the method below, use it only in
-    the external sessions
-    # method using graphql 'Follow' endpoint
-    logger.info("Trying to find the username from the given user ID "
-                "by using the GraphQL Follow endpoint")
-
-    user_link_by_id = ("https://www.instagram.com/web/friendships/{}/follow/"
-                       .format(user_id))
-
-    web_address_navigator(browser, user_link_by_id)
-    username = get_username(browser, "profile", logger)
-    """
-
-    return None
-
-
-def is_page_available(browser, logger):
+def is_page_available(self: ICerebro):
     """ Check if the page is available and valid """
     expected_keywords = ["Page Not Found", "Content Unavailable"]
-    page_title = get_page_title(browser, logger)
-
+    page_title = get_page_title(self)
     if any(keyword in page_title for keyword in expected_keywords):
-        reload_webpage(browser)
-        page_title = get_page_title(browser, logger)
-
+        self.browser.execute_script(JS.RELOAD)
+        self.quota_supervisor.add_server_call()
+        page_title = get_page_title(self)
         if any(keyword in page_title for keyword in expected_keywords):
             if "Page Not Found" in page_title:
-                logger.warning(
-                    "The page isn't available!\t~the link may be broken, "
-                    "or the page may have been removed..."
+                self.logger.warning(
+                    "The page isn't available, the link may be broken, or the page may have been removed"
                 )
-
             elif "Content Unavailable" in page_title:
-                logger.warning(
-                    "The page isn't available!\t~the user may have blocked " "you..."
+                self.logger.warning(
+                    "The page isn't available, the bot may have blocked"
                 )
-
             return False
-
     return True
 
 
-def reload_webpage(browser):
-    """ Reload the current webpage """
-    browser.execute_script("location.reload()")
-    update_activity(browser, state=None)
-    sleep(2)
-
-    return True
-
-
-def get_page_title(browser, logger):
-    """ Get the title of the webpage """
+def get_page_title(self: ICerebro):
+    """ Get the title of the web page """
     # wait for the current page fully load to get the correct page's title
-    explicit_wait(browser, "PFL", [], logger, 10)
-
+    explicit_wait(self, "PFL", [], 10)
     try:
-        page_title = browser.title
-
+        page_title = self.browser.title
     except WebDriverException:
         try:
-            page_title = browser.execute_script("return document.title")
-
+            page_title = self.browser.execute_script(JS.GET_TITLE_1)
         except WebDriverException:
             try:
-                page_title = browser.execute_script(
-                    "return document.getElementsByTagName('title')[0].text"
-                )
-
+                page_title = self.browser.execute_script(JS.GET_TITLE_2)
             except WebDriverException:
-                logger.info("Unable to find the title of the page :(")
+                self.logger.info("Unable to find the title of the page")
                 return None
-
     return page_title
-
-
-def get_action_delay(self, action):
-    """ Get the delay time to sleep after doing actions """
-    delays = {
-        "like": self.settings.action_delays_like,
-        "comment": self.settings.action_delays_comment,
-        "follow": self.settings.action_delays_follow,
-        "unfollow": self.settings.action_delays_unfollow,
-        "story": self.settings.action_delays_story
-    }
-
-    if not self.settings.action_delays_enabled or action not in delays:
-        return 1
-
-    if not self.settings.action_delays_randomize:
-        return delays[action]
-
-    return random.uniform(
-        delays[action]*self.settings.action_delays_random_range_from,
-        delays[action]*self.settings.action_delays_random_range_to)
-
-
-def deform_emojis(text):
-    """ Convert unicode emojis into their text form """
-    new_text = ""
-    emojiless_text = ""
-    data = regex.findall(r"\X", text)
-    emojis_in_text = []
-
-    for word in data:
-        if any(char in UNICODE_EMOJI for char in word):
-            word_emoji = emoji.demojize(word).replace(":", "").replace("_", " ")
-            if word_emoji not in emojis_in_text:  # do not add an emoji if
-                # already exists in text
-                emojiless_text += " "
-                new_text += " ({}) ".format(word_emoji)
-                emojis_in_text.append(word_emoji)
-            else:
-                emojiless_text += " "
-                new_text += " "  # add a space [instead of an emoji to be
-                # duplicated]
-
-        else:
-            new_text += word
-            emojiless_text += word
-
-    emojiless_text = remove_extra_spaces(emojiless_text)
-    new_text = remove_extra_spaces(new_text)
-
-    return new_text, emojiless_text
-
-
-def get_time_until_next_month():
-    """ Get total seconds remaining until the next month """
-    now = datetime.datetime.now()
-    next_month = now.month + 1 if now.month < 12 else 1
-    year = now.year if now.month < 12 else now.year + 1
-    date_of_next_month = datetime.datetime(year, next_month, 1)
-
-    remaining_seconds = (date_of_next_month - now).total_seconds()
-
-    return remaining_seconds
-
-
-def remove_extra_spaces(text):
-    """ Find and remove redundant spaces more than 1 in text """
-    new_text = re.sub(r" {2,}", " ", text)
-
-    return new_text
-
-
-def has_any_letters(text):
-    """ Check if the text has any letters in it """
-    # result = re.search("[A-Za-z]", text)   # works only with english letters
-    result = any(
-        c.isalpha() for c in text
-    )  # works with any letters - english or non-english
-
-    return result
-
-
-def is_follow_me(browser, person=None):
-    # navigate to profile page if not already in it
-    if person:
-        user_link = "https://www.instagram.com/{}/".format(person)
-        web_address_navigator(browser, user_link)
-
-    return getUserData("graphql.user.follows_viewer", browser)
-
-
-def progress_tracker(current_value, highest_value, initial_time, logger):
-    """ Provide a progress tracker to keep value updated until finishes """
-    if current_value is None or highest_value is None or highest_value == 0:
-        return
-
-    try:
-        real_time = time()
-        progress_percent = int((current_value / highest_value) * 100)
-
-        elapsed_time = real_time - initial_time
-        elapsed = (
-            "{:.0f} seconds".format(elapsed_time/1000)
-            if elapsed_time/1000 < 60
-            else "{:.1f} minutes".format(elapsed_time/1000/60)
-        )
-
-        eta_time = abs(
-            (elapsed_time * 100) / (progress_percent if progress_percent != 0 else 1)
-            - elapsed_time
-        )
-        eta = (
-            "{:.0f} seconds".format(eta_time/1000)
-            if eta_time/1000 < 60
-            else "{:.1f} minutes".format(eta_time/1000/60)
-        )
-
-        tracker_line = "-----------------------------------"
-        filled_index = int(progress_percent / 2.77)
-        progress_container = (
-            "[" + tracker_line[:filled_index] + "+" + tracker_line[filled_index:] + "]"
-        )
-        progress_container = (
-            progress_container[: filled_index + 1].replace("-", "=")
-            + progress_container[filled_index + 1 :]
-        )
-
-        total_message = (
-            "\r  {}/{} {}  {}%    "
-            "|> Elapsed: {}    "
-            "|> ETA: {}      ".format(
-                current_value,
-                highest_value,
-                progress_container,
-                progress_percent,
-                elapsed,
-                eta,
-            )
-        )
-
-        sys.stdout.write(total_message)
-        sys.stdout.flush()
-
-    except Exception as exc:
-        logger.info(
-            "Error occurred with Progress Tracker:\n{}".format(str(exc).encode("utf-8"))
-        )
-
-
-def close_dialog_box(self):
-    """ Click on the close button spec. in the 'Likes' dialog box """
-    try:
-        close = self.browser.find_element_by_xpath(
-            read_xpath("class_selectors", "likes_dialog_close_xpath")
-        )
-        nf_click_center_of_element(self, close, get_current_url(self.browser))
-    except NoSuchElementException:
-        pass
-
-
-def get_cord_location(browser, location):
-    base_url = "https://www.instagram.com/explore/locations/"
-    query_url = "{}{}{}".format(base_url, location, "?__a=1")
-    browser.get(query_url)
-    json_text = browser.find_element_by_xpath(
-        read_xpath(get_cord_location.__name__, "json_text")
-    ).text
-    data = json.loads(json_text)
-
-    lat = data["graphql"]["location"]["lat"]
-    lon = data["graphql"]["location"]["lng"]
-
-    return lat, lon
-
-
-def get_bounding_box(
-    latitude_in_degrees, longitude_in_degrees, half_side_in_miles, logger
-):
-    if half_side_in_miles == 0:
-        logger.error("Check your Radius its lower then 0")
-        return {}
-    if latitude_in_degrees < -90.0 or latitude_in_degrees > 90.0:
-        logger.error("Check your latitude should be between -90/90")
-        return {}
-    if longitude_in_degrees < -180.0 or longitude_in_degrees > 180.0:
-        logger.error("Check your longtitude should be between -180/180")
-        return {}
-    half_side_in_km = half_side_in_miles * 1.609344
-    lat = radians(latitude_in_degrees)
-    lon = radians(longitude_in_degrees)
-
-    radius = 6371
-    # Radius of the parallel at given latitude
-    parallel_radius = radius * cos(lat)
-
-    lat_min = lat - half_side_in_km / radius
-    lat_max = lat + half_side_in_km / radius
-    lon_min = lon - half_side_in_km / parallel_radius
-    lon_max = lon + half_side_in_km / parallel_radius
-
-    lat_min = rad2deg(lat_min)
-    lon_min = rad2deg(lon_min)
-    lat_max = rad2deg(lat_max)
-    lon_max = rad2deg(lon_max)
-
-    bbox = {
-        "lat_min": lat_min,
-        "lat_max": lat_max,
-        "lon_min": lon_min,
-        "lon_max": lon_max,
-    }
-
-    return bbox
-
-
-def take_rotative_screenshot(browser, logfolder):
-    """
-        Make a sequence of screenshots, based on hour:min:secs
-    """
-    global next_screenshot
-
-    if next_screenshot == 1:
-        browser.save_screenshot("{}screenshot_1.png".format(logfolder))
-    elif next_screenshot == 2:
-        browser.save_screenshot("{}screenshot_2.png".format(logfolder))
-    else:
-        browser.save_screenshot("{}screenshot_3.png".format(logfolder))
-        next_screenshot = 0
-        # sum +1 next
-
-    # update next
-    next_screenshot += 1
-
-
-def get_query_hash(browser, logger):
-    """ Load Instagram JS file and find query hash code """
-    link = "https://www.instagram.com/static/bundles/es6/Consumer.js/1f67555edbd3.js"
-    web_address_navigator(browser, link)
-    page_source = browser.page_source
-    # locate pattern value from JS file
-    # sequence of 32 words and/or numbers just before ,n=" value
-    hash = re.findall('[a-z0-9]{32}(?=",n=")', page_source)
-    if hash:
-        return hash[0]
-    else:
-        logger.warn("Query Hash not found")
 
 
 def is_mandatory_character(self, uchr):
@@ -1496,3 +967,443 @@ def check_character_set(self, unistr):
     return all(
         is_mandatory_character(self, uchr) for uchr in unistr if uchr.isalpha()
     )
+
+
+def check_authorization(self: ICerebro, method, notify=True):
+    """ Check if user is NOW logged in """
+    if notify is True:
+        self.logger.info("Checking if '{}' is logged in".format(self.username))
+
+    # different methods can be added in future
+    if method == "activity counts":
+        user_link = "https://www.instagram.com/{}/".format(self.username)
+        if not check_if_in_correct_page(self, user_link):
+            go_to_bot_user_page(self)
+
+        # if user is not logged in, `activity_counts` will be `None`- JS `null`
+        try:
+            activity_counts = self.browser.execute_script(JS.ACTIVITY_COUNT)
+        except WebDriverException:
+            try:
+                self.browser.execute_script(JS.RELOAD)
+                self.quota_supervisor.add_server_call()
+                activity_counts = self.browser.execute_script(JS.ACTIVITY_COUNT)
+            except WebDriverException:
+                activity_counts = None
+        # if user is not logged in, `activity_counts_new` will be `None`- JS
+        # `null`
+        try:
+            activity_counts_new = self.browser.execute_script(JS.VIEWER)
+        except WebDriverException:
+            try:
+                self.browser.execute_script(JS.RELOAD)
+                activity_counts_new = self.browser.execute_script(JS.VIEWER)
+            except WebDriverException:
+                activity_counts_new = None
+
+        if activity_counts is None and activity_counts_new is None:
+            if notify is True:
+                self.logger.critical("'{}' is not logged in".format(self.username))
+            return False
+    return True
+
+
+# TODO: check all bellow here (remove if unused, rewrite if used)
+
+# @contextmanager
+# def interruption_handler(
+#     threaded=False,
+#     SIG_type=signal.SIGINT,
+#     handler=signal.SIG_IGN,
+#     notify=None,
+#     logger=None,
+# ):
+#     """ Handles external interrupt, usually initiated by the user like
+#     KeyboardInterrupt with CTRL+C """
+#     if notify is not None and logger is not None:
+#         logger.warning(notify)
+#
+#     if not threaded:
+#         original_handler = signal.signal(SIG_type, handler)
+#
+#     try:
+#         yield
+#
+#     finally:
+#         if not threaded:
+#             signal.signal(SIG_type, original_handler)
+#
+#
+
+#
+#
+# def get_username_by_js_query(browser, track, logger):
+#     """ Get the username of a user from the loaded profile page """
+#     if track == "profile":
+#         query = "return window._sharedData.entry_data. \
+#                     ProfilePage[0].graphql.user.username"
+#
+#     elif track == "post":
+#         query = "return window._sharedData.entry_data. \
+#                     PostPage[0].graphql.shortcode_media.owner.username"
+#
+#     try:
+#         username = browser.execute_script(query)
+#
+#     except WebDriverException:
+#         try:
+#             browser.execute_script("location.reload()")
+#             update_activity(browser, state=None)
+#
+#             username = browser.execute_script(query)
+#
+#         except WebDriverException:
+#             current_url = get_current_url(browser)
+#             logger.info(
+#                 "Failed to get the username from '{}' page".format(
+#                     current_url or "user" if track == "profile" else "post"
+#                 )
+#             )
+#             username = None
+#
+#     # in future add XPATH ways of getting username
+#
+#     return username
+#
+#
+# def find_user_id(browser, track, username, logger):
+#     """  Find the user ID from the loaded page """
+#     if track in ["dialog", "profile"]:
+#         query = "return window.__additionalData[Object.keys(window.__additionalData)[0]].data.graphql.user.id"
+#
+#     elif track == "post":
+#         query = (
+#             "return window._sharedData.entry_data.PostPage["
+#             "0].graphql.shortcode_media.owner.id"
+#         )
+#         meta_XP = read_xpath(find_user_id.__name__, "meta_XP")
+#
+#     failure_message = "Failed to get the user ID of '{}' from {} page!".format(
+#         username, track
+#     )
+#
+#     try:
+#         user_id = browser.execute_script(query)
+#
+#     except WebDriverException:
+#         try:
+#             browser.execute_script("location.reload()")
+#             update_activity(browser, state=None)
+#
+#             user_id = browser.execute_script(
+#                 "return window._sharedData."
+#                 "entry_data.ProfilePage[0]."
+#                 "graphql.user.id"
+#             )
+#
+#         except WebDriverException:
+#             if track == "post":
+#                 try:
+#                     user_id = browser.find_element_by_xpath(meta_XP).get_attribute(
+#                         "content"
+#                     )
+#                     if user_id:
+#                         user_id = format_number(user_id)
+#
+#                     else:
+#                         logger.error("{}\t~empty string".format(failure_message))
+#                         user_id = None
+#
+#                 except NoSuchElementException:
+#                     logger.error(failure_message)
+#                     user_id = None
+#
+#             else:
+#                 logger.error(failure_message)
+#                 user_id = None
+#
+#     return user_id
+#
+#
+# @contextmanager
+# def new_tab(browser):
+#     """ USE once a host tab must remain untouched and yet needs extra data-
+#     get from guest tab """
+#     try:
+#         # add a guest tab
+#         browser.execute_script("window.open()")
+#         sleep(1)
+#         # switch to the guest tab
+#         browser.switch_to.window(browser.window_handles[1])
+#         sleep(2)
+#         yield
+#
+#     finally:
+#         # close the guest tab
+#         browser.execute_script("window.close()")
+#         sleep(1)
+#         # return to the host tab
+#         browser.switch_to.window(browser.window_handles[0])
+#         sleep(2)
+#
+#
+# def get_username_from_id(browser, user_id, logger):
+#     """ Convert user ID to username """
+#     # method using graphql 'Account media' endpoint
+#     logger.info("Trying to find the username from the given user ID by loading a post")
+#
+#     query_hash = "42323d64886122307be10013ad2dcc44"  # earlier-
+#     # "472f257a40c653c64c666ce877d59d2b"
+#     graphql_query_URL = (
+#         "https://www.instagram.com/graphql/query/?query_hash" "={}".format(query_hash)
+#     )
+#     variables = {"id": str(user_id), "first": 1}
+#     post_url = "{}&variables={}".format(graphql_query_URL, str(json.dumps(variables)))
+#
+#     web_address_navigator(browser, post_url)
+#     try:
+#         pre = browser.find_element_by_tag_name("pre").text
+#     except NoSuchElementException:
+#         logger.info("Encountered an error to find `pre` in page, skipping username.")
+#         return None
+#     user_data = json.loads(pre)["data"]["user"]
+#
+#     if user_data:
+#         user_data = user_data["edge_owner_to_timeline_media"]
+#
+#         if user_data["edges"]:
+#             post_code = user_data["edges"][0]["node"]["shortcode"]
+#             post_page = "https://www.instagram.com/p/{}".format(post_code)
+#
+#             web_address_navigator(browser, post_page)
+#             username = get_username_by_js_query(browser, "post", logger)
+#             if username:
+#                 return username
+#
+#         else:
+#             if user_data["count"] == 0:
+#                 logger.info("Profile with ID {}: no pics found".format(user_id))
+#
+#             else:
+#                 logger.info(
+#                     "Can't load pics of a private profile to find username ("
+#                     "ID: {})".format(user_id)
+#                 )
+#
+#     else:
+#         logger.info(
+#             "No profile found, the user may have blocked you (ID: {})".format(user_id)
+#         )
+#         return None
+#
+#     """  method using private API
+#     #logger.info("Trying to find the username from the given user ID by a
+#     quick API call")
+#
+#     #req = requests.get(u"https://i.instagram.com/api/v1/users/{}/info/"
+#     #                   .format(user_id))
+#     #if req:
+#     #    data = json.loads(req.text)
+#     #    if data["user"]:
+#     #        username = data["user"]["username"]
+#     #        return username
+#     """
+#
+#     """ Having a BUG (random log-outs) with the method below, use it only in
+#     the external sessions
+#     # method using graphql 'Follow' endpoint
+#     logger.info("Trying to find the username from the given user ID "
+#                 "by using the GraphQL Follow endpoint")
+#
+#     user_link_by_id = ("https://www.instagram.com/web/friendships/{}/follow/"
+#                        .format(user_id))
+#
+#     web_address_navigator(browser, user_link_by_id)
+#     username = get_username(browser, "profile", logger)
+#     """
+#
+#     return None
+#
+#
+#
+#
+#
+# def get_time_until_next_month():
+#     """ Get total seconds remaining until the next month """
+#     now = datetime.datetime.now()
+#     next_month = now.month + 1 if now.month < 12 else 1
+#     year = now.year if now.month < 12 else now.year + 1
+#     date_of_next_month = datetime.datetime(year, next_month, 1)
+#
+#     remaining_seconds = (date_of_next_month - now).total_seconds()
+#
+#     return remaining_seconds
+#
+#
+
+#
+#
+# def has_any_letters(text):
+#     """ Check if the text has any letters in it """
+#     # result = re.search("[A-Za-z]", text)   # works only with english letters
+#     result = any(
+#         c.isalpha() for c in text
+#     )  # works with any letters - english or non-english
+#
+#     return result
+#
+#
+# def is_follow_me(browser, person=None):
+#     # navigate to profile page if not already in it
+#     if person:
+#         user_link = "https://www.instagram.com/{}/".format(person)
+#         web_address_navigator(browser, user_link)
+#
+#     return get_user_data("graphql.user.follows_viewer", browser)
+#
+#
+# def progress_tracker(current_value, highest_value, initial_time, logger):
+#     """ Provide a progress tracker to keep value updated until finishes """
+#     if current_value is None or highest_value is None or highest_value == 0:
+#         return
+#
+#     try:
+#         real_time = time()
+#         progress_percent = int((current_value / highest_value) * 100)
+#
+#         elapsed_time = real_time - initial_time
+#         elapsed = (
+#             "{:.0f} seconds".format(elapsed_time/1000)
+#             if elapsed_time/1000 < 60
+#             else "{:.1f} minutes".format(elapsed_time/1000/60)
+#         )
+#
+#         eta_time = abs(
+#             (elapsed_time * 100) / (progress_percent if progress_percent != 0 else 1)
+#             - elapsed_time
+#         )
+#         eta = (
+#             "{:.0f} seconds".format(eta_time/1000)
+#             if eta_time/1000 < 60
+#             else "{:.1f} minutes".format(eta_time/1000/60)
+#         )
+#
+#         tracker_line = "-----------------------------------"
+#         filled_index = int(progress_percent / 2.77)
+#         progress_container = (
+#             "[" + tracker_line[:filled_index] + "+" + tracker_line[filled_index:] + "]"
+#         )
+#         progress_container = (
+#             progress_container[: filled_index + 1].replace("-", "=")
+#             + progress_container[filled_index + 1 :]
+#         )
+#
+#         total_message = (
+#             "\r  {}/{} {}  {}%    "
+#             "|> Elapsed: {}    "
+#             "|> ETA: {}      ".format(
+#                 current_value,
+#                 highest_value,
+#                 progress_container,
+#                 progress_percent,
+#                 elapsed,
+#                 eta,
+#             )
+#         )
+#
+#         sys.stdout.write(total_message)
+#         sys.stdout.flush()
+#
+#     except Exception as exc:
+#         logger.info(
+#             "Error occurred with Progress Tracker:\n{}".format(str(exc).encode("utf-8"))
+#         )
+#
+#
+# def get_cord_location(browser, location):
+#     base_url = "https://www.instagram.com/explore/locations/"
+#     query_url = "{}{}{}".format(base_url, location, "?__a=1")
+#     browser.get(query_url)
+#     json_text = browser.find_element_by_xpath(
+#         read_xpath(get_cord_location.__name__, "json_text")
+#     ).text
+#     data = json.loads(json_text)
+#
+#     lat = data["graphql"]["location"]["lat"]
+#     lon = data["graphql"]["location"]["lng"]
+#
+#     return lat, lon
+#
+#
+# def get_bounding_box(
+#     latitude_in_degrees, longitude_in_degrees, half_side_in_miles, logger
+# ):
+#     if half_side_in_miles == 0:
+#         logger.error("Check your Radius its lower then 0")
+#         return {}
+#     if latitude_in_degrees < -90.0 or latitude_in_degrees > 90.0:
+#         logger.error("Check your latitude should be between -90/90")
+#         return {}
+#     if longitude_in_degrees < -180.0 or longitude_in_degrees > 180.0:
+#         logger.error("Check your longtitude should be between -180/180")
+#         return {}
+#     half_side_in_km = half_side_in_miles * 1.609344
+#     lat = radians(latitude_in_degrees)
+#     lon = radians(longitude_in_degrees)
+#
+#     radius = 6371
+#     # Radius of the parallel at given latitude
+#     parallel_radius = radius * cos(lat)
+#
+#     lat_min = lat - half_side_in_km / radius
+#     lat_max = lat + half_side_in_km / radius
+#     lon_min = lon - half_side_in_km / parallel_radius
+#     lon_max = lon + half_side_in_km / parallel_radius
+#
+#     lat_min = rad2deg(lat_min)
+#     lon_min = rad2deg(lon_min)
+#     lat_max = rad2deg(lat_max)
+#     lon_max = rad2deg(lon_max)
+#
+#     bbox = {
+#         "lat_min": lat_min,
+#         "lat_max": lat_max,
+#         "lon_min": lon_min,
+#         "lon_max": lon_max,
+#     }
+#
+#     return bbox
+#
+#
+# def take_rotative_screenshot(browser, logfolder):
+#     """
+#         Make a sequence of screenshots, based on hour:min:secs
+#     """
+#     global next_screenshot
+#
+#     if next_screenshot == 1:
+#         browser.save_screenshot("{}screenshot_1.png".format(logfolder))
+#     elif next_screenshot == 2:
+#         browser.save_screenshot("{}screenshot_2.png".format(logfolder))
+#     else:
+#         browser.save_screenshot("{}screenshot_3.png".format(logfolder))
+#         next_screenshot = 0
+#         # sum +1 next
+#
+#     # update next
+#     next_screenshot += 1
+#
+#
+# def get_query_hash(browser, logger):
+#     """ Load Instagram JS file and find query hash code """
+#     link = "https://www.instagram.com/static/bundles/es6/Consumer.js/1f67555edbd3.js"
+#     web_address_navigator(browser, link)
+#     page_source = browser.page_source
+#     # locate pattern value from JS file
+#     # sequence of 32 words and/or numbers just before ,n=" value
+#     hash = re.findall('[a-z0-9]{32}(?=",n=")', page_source)
+#     if hash:
+#         return hash[0]
+#     else:
+#         logger.warn("Query Hash not found")
+#

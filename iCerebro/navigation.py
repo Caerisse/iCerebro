@@ -1,9 +1,64 @@
 from time import sleep
 
-from instapy.util import web_address_navigator, get_current_url
-from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, WebDriverException, \
+    TimeoutException
 from selenium.webdriver import ActionChains
 from selenium.webdriver.remote.webelement import WebElement
+
+from iCerebro import ICerebro
+
+# TODO: add server calls
+
+def get_current_url(browser):
+    """ Get URL of the loaded web page """
+    try:
+        current_url = browser.execute_script("return window.location.href")
+    except WebDriverException:
+        try:
+            current_url = browser.current_url
+        except WebDriverException:
+            current_url = None
+    return current_url
+
+
+def web_address_navigator(self: ICerebro, link):
+    """Checks and compares current URL of web page and the URL to be
+    navigated and if it is different, it does navigate"""
+    current_url = get_current_url(self.browser)
+    total_timeouts = 0
+    page_type = None  # file or directory
+
+    # remove slashes at the end to compare efficiently
+    if current_url is not None and current_url.endswith("/"):
+        current_url = current_url[:-1]
+
+    if link.endswith("/"):
+        link = link[:-1]
+        page_type = "dir"  # slash at the end is a directory
+
+    new_navigation = current_url != link
+
+    if current_url is None or new_navigation:
+        link = link + "/" if page_type == "dir" else link
+        while True:
+            try:
+                self.browser.get(link)
+                self.quota_supervisor.add_server_call()
+                sleep(2)
+                break
+
+            except TimeoutException as exc:
+                if total_timeouts >= 7:
+                    raise TimeoutException(
+                        "Retried {} times to GET '{}' webpage "
+                        "but failed out of a timeout!\n\t{}".format(
+                            total_timeouts,
+                            str(link).encode("utf-8"),
+                            str(exc).encode("utf-8"),
+                        )
+                    )
+                total_timeouts += 1
+                sleep(2)
 
 
 def check_if_in_correct_page(
@@ -40,6 +95,7 @@ def nf_go_to_tag_page(
             '//a[@href="/explore/tags/{}/"]'.format(tag)
         )
         nf_click_center_of_element(self, tag_option, tag_link)
+        self.quota_supervisor.add_server_call()
     except NoSuchElementException:
         self.logger.warning("Failed to get a page element")
 
@@ -58,6 +114,7 @@ def nf_go_to_user_page(
             '//a[@href="/{}/"]'.format(username)
         )
         nf_click_center_of_element(self, user_option, user_link)
+        self.quota_supervisor.add_server_call()
     except NoSuchElementException:
         self.logger.warning("Failed to go to get a page element")
 
@@ -97,9 +154,11 @@ def nf_scroll_into_view(
 def nf_click_center_of_element(
         self,
         element: WebElement,
-        desired_link: str
+        desired_link: str = None
 ):
     """Moves pointer to center of element and then clicks"""
+    if not desired_link:
+        desired_link = get_current_url(self.browser)
     (
         ActionChains(self.browser)
         .move_to_element(element)
@@ -117,7 +176,7 @@ def nf_click_center_of_element(
         sleep(1)
         if not check_if_in_correct_page(self, desired_link):
             self.logger.warning("Failed to press element, navigating to desired link")
-            web_address_navigator(self.browser, desired_link)
+            web_address_navigator(self, desired_link)
     except StaleElementReferenceException:
         pass
 
@@ -153,7 +212,7 @@ def nf_find_and_press_back(
     else:
         nf_scroll_into_view(self, back)
         nf_click_center_of_element(self, back, link)
-        sleep(1)
+        self.quota_supervisor.add_server_call()
         bad_loading = self.browser.find_elements_by_xpath(
             '/html/body/div[1]/section[@class="_9eogI E3X2T"]/span[@class="BHkOG PID-B"]'
         )
@@ -162,8 +221,8 @@ def nf_find_and_press_back(
             nf_find_and_press_back(self, link, try_n)
     if not check_if_in_correct_page(self, link):
         self.logger.error("Failed to go back, navigating there")
-        # TODO: retry to get there naturally
-        web_address_navigator(self.browser, link)
+        # TODO: retry to get there naturally, try browser.back()
+        web_address_navigator(self, link)
 
 
 def nf_go_from_post_to_profile(
@@ -177,9 +236,10 @@ def nf_go_from_post_to_profile(
         )
         nf_scroll_into_view(self, username_button)
         nf_click_center_of_element(self, username_button, user_link)
+        self.quota_supervisor.add_server_call()
     except NoSuchElementException:
         self.logger.warning("Failed to get user page button, navigating there")
-        web_address_navigator(self.browser, user_link)
+        web_address_navigator(self, user_link)
 
 
 def nf_go_to_follow_page(self, which: str, username: str):
@@ -192,9 +252,10 @@ def nf_go_to_follow_page(self, which: str, username: str):
         )
         nf_scroll_into_view(self, follow_which_button)
         nf_click_center_of_element(self, follow_which_button, follow_link)
+        self.quota_supervisor.add_server_call()
     except NoSuchElementException:
         self.logger.error("Failed to get {} page button, navigating there".format(which))
-        web_address_navigator(self.browser, follow_link)
+        web_address_navigator(self, follow_link)
 
 
 def nf_go_to_home(self):
@@ -204,6 +265,17 @@ def nf_go_to_home(self):
     try:
         home_button = self.browser.find_element_by_xpath('//a[@href="/"]')
         nf_click_center_of_element(self, home_button, home_link)
+        self.quota_supervisor.add_server_call()
     except NoSuchElementException:
         self.logger.error("Failed to get home button, navigating there")
-        web_address_navigator(self.browser, home_link)
+        web_address_navigator(self, home_link)
+
+
+def go_to_bot_user_page(self):
+    # TODO: click self user page button
+    nf_go_to_user_page(self, self.username)
+
+
+def go_to_feed(self):
+    # TODO: click feed button
+    web_address_navigator(self, "https://www.instagram.com")

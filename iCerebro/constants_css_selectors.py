@@ -1,0 +1,1 @@
+LIKES_COUNT = "section._1w76c._nlmjy > div > a > span"

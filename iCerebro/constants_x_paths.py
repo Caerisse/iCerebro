@@ -87,6 +87,7 @@ VIDEO = '//video[@class="tWeCl"]'
 FIND_DIALOG_BOX = "//body/div[4]/div/div[2]"
 # is_private_profile
 IS_PRIVATE = '//h2[@class="_kcrwx"]'
+IS_PRIVATE_PROFILE = "//*[contains(text(), 'This Account is Private')]"
 # like_comment
 SPAN_LIKE_ELEMENTS = "//span[@aria-label='Like']"
 COMMENT_LIKE_BUTTON = ".."
@@ -134,3 +135,4 @@ POST_IMAGES = '/html/body/div[1]/section/main/div/div/article//img[@class="FFVAD
 POST_VIDEO_PREVIEWS = '/html/body/div[1]/section/main/div/div/article//img[@class="_8jZFn"]'
 POST_VIDEOS = '/html/body/div[1]/section/main/div/div/article//video[@class="tWeCl"]'
 POST_CAPTION = "/html/body/div[1]/section/main/div/div/article//div/div/span/span"
+POST_DATE = '/html/body/div[1]/section/main/div/div/article//a[@class="c-Yi7"]/time'

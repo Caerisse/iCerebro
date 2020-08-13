@@ -22,6 +22,7 @@ class ICerebroUser(models.Model):
     class Meta:
         verbose_name = "icerebrouser"
         verbose_name_plural = "icerebrousers"
+        db_table = 'icerebro_users'
 
 
 @receiver(post_save, sender=User)
@@ -70,6 +71,7 @@ class InstaUser(models.Model):
     class Meta:
         verbose_name = "instauser"
         verbose_name_plural = "instausers"
+        db_table = "insta_users"
 
 
 class FollowRelation(models.Model):
@@ -83,6 +85,7 @@ class FollowRelation(models.Model):
 
     class Meta:
         unique_together = ('follower', 'followed')
+        db_table = "follow_relations"
 
 
 class Post(models.Model):
@@ -101,6 +104,9 @@ class Post(models.Model):
     def __str__(self):
         return "Post by {}, link: {}".format(self.instauser.username, self.link)
 
+    class Meta:
+        db_table = "posts"
+
 
 class Comment(models.Model):
     objects = models.Manager()
@@ -115,6 +121,7 @@ class Comment(models.Model):
 
     class Meta:
         unique_together = ('date_posted', 'instauser', 'post')
+        db_table = "comments"
 
 
 class BotCookies(models.Model):
@@ -127,6 +134,7 @@ class BotCookies(models.Model):
 
     class Meta:
         unique_together = ('bot', 'cookie_name')
+        db_table = "cookies"
 
 
 class BotFollowed(models.Model):
@@ -139,6 +147,7 @@ class BotFollowed(models.Model):
 
     class Meta:
         unique_together = ('bot', 'followed')
+        db_table = "bot_followed"
 
 
 class BotBlacklist(models.Model):
@@ -152,6 +161,7 @@ class BotBlacklist(models.Model):
 
     class Meta:
         unique_together = ('bot', 'instauser', 'campaign', 'action')
+        db_table = "bot_blacklists"
 
 
 class BotSettings(models.Model):
@@ -403,7 +413,16 @@ class BotSettings(models.Model):
 
     class Meta:
         unique_together = ('instauser', 'name')
+        db_table = "bot_settings"
+
 
 class BotScheduledPost(models.Model):
-    pass
+    objects = models.Manager()
 
+    bot = models.ForeignKey(InstaUser, on_delete=models.CASCADE)
+    date = models.DateTimeField(auto_now_add=True)
+    images_links = ArrayField(models.CharField(max_length=500))
+    caption = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "bot_scheduled_post"

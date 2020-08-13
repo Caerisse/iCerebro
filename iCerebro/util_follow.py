@@ -1,377 +1,39 @@
-""" Module which handles the follow features like unfollowing and following """
-
-import os
 import random
-import json
-import csv
-import sqlite3
-from datetime import datetime, timedelta
-from math import ceil
-
 from time import sleep
-from typing import Tuple, Union, List
+from typing import Union
+from typing import Tuple
 
 from selenium.webdriver.remote.webelement import WebElement
-
-from app_main.models import BotFollowed
-from iCerebro import ICerebro
-from iCerebro.navigation import nf_go_from_post_to_profile, nf_find_and_press_back, nf_go_to_user_page, \
-    check_if_in_correct_page, nf_click_center_of_element, nf_go_to_follow_page, nf_scroll_into_view
-from iCerebro.util import format_number, getUserData, default_profile_pic_instagram, Interactions
-from iCerebro.util import update_activity
-from iCerebro.util import add_user_to_blacklist
-from iCerebro.util import web_address_navigator
-from iCerebro.util import get_relationship_counts
-from iCerebro.util import emergency_exit
-from iCerebro.util import find_user_id
-from iCerebro.util import explicit_wait
-from iCerebro.util import get_username_from_id
-from iCerebro.util import is_page_available
-from iCerebro.util import reload_webpage
-from iCerebro.util import get_action_delay
-from iCerebro.util import get_query_hash
-from iCerebro.quota_supervisor import quota_supervisor
-from iCerebro.util import is_follow_me
-
-from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotVisibleException
 
-
-import iCerebro.constants as C
-import iCerebro.constants_css_selectors as CS
-import iCerebro.constants_js_scripts as JS
 import iCerebro.constants_x_paths as XP
-from iCerebro.util_like import nf_get_all_users_on_element, like_by_users
-
-
-def nf_validate_user_call(
-        self: ICerebro,
-        username: str,
-        post_link: str = None
-) -> Tuple[bool, str]:
-    """Checks if user can be liked according to declared settings
-
-   Also stores user data in database if appropriate
-
-   :returns: valid, reason
-   """
-    followers_count = None
-    following_count = None
-    number_of_posts = None
-    if username == self.username:
-        return False, "Can not follow self"
-
-    if username in self.settings.ignore_users:
-        return False, "'{}' is in the 'ignore_users' list".format(username)
-
-    # TODO: move blacklist to django database
-    # blacklist_file = "{}blacklist.csv".format(self.settings.logfolder)
-    # blacklist_file_exists = os.path.isfile(blacklist_file)
-    # if blacklist_file_exists:
-    #     with open("{}blacklist.csv".format(self.settings.logfolder), "rt") as f:
-    #         reader = csv.reader(f, delimiter=",")
-    #         for row in reader:
-    #             for field in row:
-    #                 if field == username:
-    #                     return False, "'{}' is in the 'blacklist'".format(username)
-
-    if not any(
-            [self.settings.potency_ratio,
-             self.settings.delimit_by_numbers,
-             self.settings.max_followers,
-             self.settings.max_following,
-             self.settings.min_followers,
-             self.settings.min_following,
-             self.settings.min_posts,
-             self.settings.max_posts,
-             self.settings.skip_private,
-             self.settings.skip_private_percentage,
-             self.settings.skip_no_profile_pic,
-             self.settings.skip_no_profile_pic_percentage,
-             self.settings.skip_business,
-             self.settings.skip_non_business,
-             self.settings.skip_business_percentage,
-             self.settings.skip_business_categories,
-             self.settings.skip_bio_keyword]
-    ):
-        # Nothing to check, skip going to user page and then back for nothing
-        return True, "Valid user"
-
-    try:
-        if post_link:
-            nf_go_from_post_to_profile(self, username)
-        self.logger.debug("Checking user page")
-        # Checks the potential of target user by relationship status in order
-        # to delimit actions within the desired boundary
-        if (
-                self.settings.potency_ratio
-                or self.settings.delimit_by_numbers
-                and (self.settings.max_followers or self.settings.max_following or
-                     self.settings.min_followers or self.settings.min_following)
-        ):
-
-            relationship_ratio = None
-            reverse_relationship = False
-
-            # get followers & following counts
-            self.logger.debug("Getting relationship counts")
-            followers_count, following_count = get_relationship_counts(self, username)
-
-            potency_ratio = self.settings.potency_ratio if self.settings.potency_ratio else None
-            if self.settings.potency_ratio:
-                if self.settings.potency_ratio >= 0:
-                    potency_ratio = self.settings.potency_ratio
-                else:
-                    potency_ratio = -self.settings.potency_ratio
-                    reverse_relationship = True
-
-            # division by zero is bad
-            followers_count = 1 if followers_count == 0 else followers_count
-            following_count = 1 if following_count == 0 else following_count
-
-            if followers_count and following_count:
-                relationship_ratio = (
-                    float(followers_count) / float(following_count)
-                    if not reverse_relationship
-                    else float(following_count) / float(followers_count)
-                )
-
-            self.logger.info(
-                "User: '{}'  |> followers: {}  |> following: {}  |> relationship "
-                "ratio: {}".format(
-                    username,
-                    followers_count if followers_count else "unknown",
-                    following_count if following_count else "unknown",
-                    "{.2f}".format(relationship_ratio) if relationship_ratio else "unknown",
-                )
-            )
-
-            if followers_count or following_count:
-                if potency_ratio and relationship_ratio and relationship_ratio < potency_ratio:
-                    return False, "Potency ratio not satisfied"
-
-                if self.settings.delimit_by_numbers:
-                    if followers_count:
-                        if self.settings.max_followers:
-                            if followers_count > self.settings.max_followers:
-                                return False, "'{}'s followers count exceeds maximum limit".format(username)
-
-                        if self.settings.min_followers:
-                            if followers_count < self.settings.min_followers:
-                                return False, "'{}'s followers count is less than minimum limit".format(username)
-
-                    if following_count:
-                        if self.settings.max_following:
-                            if following_count > self.settings.max_following:
-                                return False, "'{}'s following count exceeds maximum limit".format(username)
-
-                        if self.settings.min_following:
-                            if following_count < self.settings.min_following:
-                                return False, "'{}'s following count is less than minimum limit".format(username)
-
-        if self.settings.min_posts or self.settings.max_posts:
-            # if you are interested in relationship number of posts boundaries
-            try:
-                number_of_posts = getUserData(self, JS.NUMBER_OF_POST)
-            except WebDriverException:
-                self.logger.error("Couldn't get number of posts")
-                return False, "Couldn't get number of posts"
-
-            if self.settings.max_posts:
-                if number_of_posts > self.settings.max_posts:
-                    reason = (
-                        "Number of posts ({}) of '{}' exceeds the maximum limit "
-                        "given {}\n".format(number_of_posts, username, self.settings.max_posts)
-                    )
-                    return False, reason
-            if self.settings.min_posts:
-                if number_of_posts < self.settings.min_posts:
-                    reason = (
-                        "Number of posts ({}) of '{}' is less than the minimum "
-                        "limit given {}\n".format(number_of_posts, username, self.settings.min_posts)
-                    )
-                    return False, reason
-
-        # Skip users
-        # skip private
-        if self.settings.skip_private:
-            try:
-                self.browser.find_element_by_xpath(XP.IS_PRIVATE_PROFILE)
-                is_private = True
-            except NoSuchElementException:
-                is_private = False
-            if is_private and (random.randint(0, 100) <= self.settings.skip_private_percentage):
-                return False, "{} is private account, skipping".format(username)
-
-        # skip no profile pic
-        if self.settings.skip_no_profile_pic:
-            try:
-                profile_pic = getUserData("graphql.user.profile_pic_url", self.browser)
-            except WebDriverException:
-                self.logger.error("Couldn't get profile picture")
-                return False, "Couldn't get profile picture"
-            if (
-                    (profile_pic in default_profile_pic_instagram
-                     or str(profile_pic).find("11906329_960233084022564_1448528159_a.jpg") > 0)
-                    and (random.randint(0, 100) <= self.settings.skip_no_profile_pic_percentage)
-            ):
-                return False, "{} has default instagram profile picture".format(username)
-
-        # skip business
-        if self.settings.skip_business or self.settings.skip_non_business:
-            # if is business account skip under conditions
-            try:
-                is_business_account = getUserData("graphql.user.is_business_account", self.browser)
-            except WebDriverException:
-                self.logger.error("Couldn't get if user is a business account")
-                return False, "Couldn't get if user is a business account",
-
-            if self.settings.skip_non_business and not is_business_account:
-                return False, "{} isn't a business account, skipping".format(username)
-
-            if is_business_account:
-                try:
-                    category = getUserData("graphql.user.business_category_name", self.browser)
-                except WebDriverException:
-                    self.logger.error("Couldn't get business category")
-                    return False, "Couldn't get business category"
-
-                if category not in self.settings.dont_skip_business_categories:
-                    if category in self.settings.skip_business_categories:
-                        return (
-                            False,
-                            "'{}' is a business account in the undesired category of '{}'".format(
-                                username, category)
-                        )
-                    elif random.randint(0, 100) <= self.settings.skip_business_percentage:
-                        return False, "'{}' is business account, skipping".format(username)
-
-        if len(self.settings.skip_bio_keyword) != 0:
-            # if contain stop words then skip
-            try:
-                profile_bio = getUserData("graphql.user.biography", self.browser)
-            except WebDriverException:
-                self.logger.error("Couldn't get get user bio")
-                return False, "Couldn't get get user bio"
-            for bio_keyword in self.settings.skip_bio_keyword:
-                if bio_keyword.lower() in profile_bio.lower():
-                    return (
-                        False,
-                        "'{}' has a bio keyword '{}', skipping".format(
-                            username, bio_keyword
-                        ),
-                    )
-
-        # if everything is ok
-        return True, "Valid user"
-
-    except NoSuchElementException:
-        return False, "Unable to locate element"
-    finally:
-        # TODO: change to django database
-        # if self.store_in_database:
-        #     try:
-        #         user = db_get_or_create_user(self, username)
-        #         self.db.session.add(user)
-        #         user.date_checked = datetime.now()
-        #         if followers_count:
-        #             user.followers_count = followers_count
-        #         if following_count:
-        #             user.following_count = following_count
-        #         if number_of_posts:
-        #             user.posts_count = number_of_posts
-        #         self.db.session.expunge(user)
-        #     except SQLAlchemyError:
-        #         self.db.session.rollback()
-        #     finally:
-        #         self.db.session.commit()
-        if post_link:
-            nf_find_and_press_back(self, post_link)
-
-
-def unfollow_users(
-        self: ICerebro,
-        amount: int = 10,
-        unfollow_list: Union[list, str] = "all",
-        track: str = "all",
-        unfollow_after_hours: int = None
-):
-    """Unfollows (default) 10 users from your following list"""
-
-    if self.aborting:
-        return self
-
-    valid_lists = {"all", "iCerebro_followed"}
-    if not isinstance(unfollow_list, list) or unfollow_list not in valid_lists:
-        raise ValueError("unfollow_users: use_list must be a list or one of %r." % valid_lists)
-    valid_tracks = {"all", "nonfollowers"}
-    if track not in valid_tracks:
-        raise ValueError("unfollow_users: custom_list_param must be one of %r." % valid_tracks)
-
-    self.logger.info("Unfollow Users - started")
-    # TODO: change to click self user icon
-    nf_go_to_user_page(self, self.username)
-
-    following_query = self.instauser.following
-    following_list = [following.username for following in following_query]
-    following_set = set(following_list)
-    if track == "nonfollowers":
-        self.logger.info("Unfollowing only users who do not follow back")
-        followers_list = get_followers(self, self.username)
-        following_set = following_set-set(followers_list)
-
-    if unfollow_list == "all":
-        unfollow_list = list(following_set)
-    elif unfollow_list == "iCerebro_followed":
-        self.logger.info("Unfollowing from the users followed by iCerebro")
-        if unfollow_after_hours:
-            before_date = datetime.now() - timedelta(hours=unfollow_after_hours)
-            bot_followed_query = BotFollowed.objects.filter(bot=self.username, date_lte=before_date)
-        else:
-            bot_followed_query = BotFollowed.objects.filter(bot=self.username)
-        unfollow_list = [bot_followed.followed.username for bot_followed in bot_followed_query]
-        unfollow_list = list(following_set.intersection(set(unfollow_list)))
-    else:
-        self.logger.info("Unfollowing from the list of pre-defined usernames")
-        unfollow_list = list(following_set.intersection(set(unfollow_list)))
-
-    available = len(unfollow_list)
-    if amount > available:
-        self.logger.info(
-            "There are less users to unfollow than you have requested: "
-            "{}/{}, using available amount".format(available, amount)
-        )
-        amount = available
-
-    random.shuffle(unfollow_list)
-
-    try:
-        unfollowed = unfollow_loop(self, unfollow_list, amount)
-        self.logger.info("Total people unfollowed: {}".format(unfollowed))
-        self.interactions.unfollowed += unfollowed
-
-    except Exception as exc:
-        if isinstance(exc, RuntimeWarning):
-            self.logger.warning("Warning: {} , stopping unfollow_users".format(exc))
-            return self
-        else:
-            self.logger.error("An error occurred: {}".format(exc))
-            self.aborting = True
-            return self
-
-    return self
+import iCerebro.constants_js_scripts as JS
+from iCerebro.navigation import nf_go_to_user_page
+from iCerebro.navigation import check_if_in_correct_page
+from iCerebro.navigation import nf_click_center_of_element
+from iCerebro.util import is_page_available
+from iCerebro.util import emergency_exit
+from iCerebro.util import explicit_wait
+from iCerebro.util_db import add_user_to_blacklist
+from iCerebro.util_db import add_follow_times
 
 
 def unfollow_loop(
-        self: ICerebro,
+        self,
         unfollow_list: list,
         amount: int
 ):
     """ Unfollow the given amount of users"""
     unfollowed = 0
     try:
-        skip_set = set(self.settings.dont_include).union(set(self.settings.white_list))
+        skip_set = set(
+            self.settings.dont_include
+        ).union(
+            set(self.settings.white_list)
+        ).union(
+            set(self.active_users)
+        )
         sleep_counter = 0
         sleep_after = random.randint(8, 12)
         for person in unfollow_list:
@@ -381,6 +43,7 @@ def unfollow_loop(
             if self.jumps.check_unfollows():
                 self.logger.warning(
                     "Unfollow quotient reached its peak, leaving Unfollow Users activity")
+                self.jumps.unfollows = 0
                 break
 
             if sleep_counter >= sleep_after:
@@ -389,7 +52,7 @@ def unfollow_loop(
                     "Unfollowed {} users, sleeping {} minutes and {} seconds".format(
                         sleep_counter,
                         int(delay_random/60),
-                        delay_random%60
+                        delay_random % 60
                         )
                 )
                 sleep(delay_random)
@@ -403,7 +66,7 @@ def unfollow_loop(
                         unfollowed + 1, amount, person.encode("utf-8"))
                 )
                 nf_go_to_user_page(self, person)
-                if is_page_available(self.browser, self.logger):
+                if is_page_available(self):
                     try:
                         unfollow_state, msg = unfollow(
                             self,
@@ -440,7 +103,7 @@ def unfollow_loop(
 
 
 def unfollow(
-        self: ICerebro,
+        self,
         track: str,
         person: str,
         button: Union[WebElement, None]
@@ -448,7 +111,7 @@ def unfollow(
     """ Unfollow a user either from the profile or post page or dialog box """
     # list of available tracks to unfollow in: ["profile", "post" "dialog]
     # check action availability
-    if quota_supervisor(C.UNFOLLOW) == C.JUMP:
+    if self.quota_supervisor.jump_unfollow():
         return False, "jumped"
 
     if track in ["profile", "post"]:
@@ -496,14 +159,12 @@ def unfollow(
         confirm_unfollow(self)
 
     self.logger.info("Unfollowed '{}'".format(person))
-    update_activity(self, action=C.UNFOLLOW, state=None)
-    naply = get_action_delay(self, C.UNFOLLOW)
-    sleep(naply)
+    self.quota_supervisor.add_unfollow()
     return True, "success"
 
 
 def get_following_status(
-        self: ICerebro,
+        self,
         track: str,
         person: str
 ) -> Tuple[str, Union[WebElement, None]]:  # following_status, follow_button
@@ -534,16 +195,12 @@ def get_following_status(
         except:
             return "UNAVAILABLE", None
 
-    follow_button = explicit_wait(
-        self.browser, "VOEL", [XP.FOLLOW_BUTTON_XP, "XPath"], self.logger, 7, False
-    )
+    follow_button = explicit_wait(self, "VOEL", [XP.FOLLOW_BUTTON_XP, "XPath"], 7, False)
 
     if not follow_button:
-        self.browser.execute_script("location.reload()")
-        update_activity(self)
-        follow_button = explicit_wait(
-            self.browser, "VOEL", [XP.FOLLOW_BUTTON_XP, "XPath"], self.logger, 7, False
-        )
+        self.browser.execute_script(JS.RELOAD)
+        self.quota_supervisor.add_server_call()
+        follow_button = explicit_wait(self, "VOEL", [XP.FOLLOW_BUTTON_XP, "XPath"], 7, False)
         if not follow_button:
             # cannot find the any of the expected buttons
             self.logger.error(
@@ -556,7 +213,7 @@ def get_following_status(
     return following_status, follow_button
 
 
-def confirm_unfollow(self: ICerebro):
+def confirm_unfollow(self):
     """ Deal with the confirmation dialog boxes during an unfollow """
     attempt = 0
     while attempt < 3:
@@ -575,266 +232,8 @@ def confirm_unfollow(self: ICerebro):
                 sleep(1)
 
 
-def follow_user_follow(
-        self: ICerebro,
-        follow: str,
-        usernames: List[str],
-        amount: int = 10,
-        randomize: bool = False
-):
-    if self.aborting:
-        return self
-
-    valid = {"followers", "followings"}
-    if follow not in valid:
-        raise ValueError(
-            "follow_user_follow: follow must be one of %r." % valid)
-
-    self.logger.info("Starting to follow users {}".format(follow))
-
-    for index, username in enumerate(usernames):
-        interactions = Interactions()
-        self.logger.info("Follow User {} [{}/{}] - started".format(follow, index + 1, len(usernames)))
-        self.logger.info("--> {}".format(username.encode("utf-8")))
-
-        nf_go_to_user_page(self, username)
-        sleep(1)
-
-        user_link = "https://www.instagram.com/{}".format(username)
-        follow_link = "https://www.instagram.com/{}/{}".format(username, follow)
-
-        # TODO: get follow count
-        follow_count = 10
-        actual_amount = amount
-        if follow_count < amount:
-            actual_amount = follow_count
-
-        self.logger.info("About to go to {} page".format(follow))
-        nf_go_to_follow_page(self, follow, username)
-        sleep(2)
-
-        sc_rolled = 0
-        scroll_nap = 1.5
-        already_interacted_links = []
-        random_chance = 50 if randomize else 100
-        try:
-            while interactions.followed in range(0, actual_amount):
-                if self.jumps.check_follows():
-                    self.logger.warning(
-                        "Follow quotient reached its peak, leaving Follow User {} activity".format(
-                            follow
-                        )
-                    )
-                    # reset jump counter before breaking the loop
-                    self.jumps.follows = 0
-                    self.quotient_breach = True
-                    break
-
-                if sc_rolled > 100:
-                    delay_random = random.randint(400, 600)
-                    self.logger.info(
-                        "Scrolled too much, sleeping {} minutes and {} seconds".format(
-                            int(delay_random/60),
-                            delay_random % 60
-                        )
-                    )
-                    sleep(delay_random)
-                    sc_rolled = 0
-
-                users = nf_get_all_users_on_element(self)
-                while len(users) == 0:
-                    nf_find_and_press_back(self, user_link)
-                    in_user_page = check_if_in_correct_page(self, user_link)
-                    if not in_user_page:
-                        nf_go_to_user_page(self, username)
-                    nf_go_to_follow_page(self, follow, username)
-                    users = nf_get_all_users_on_element(self)
-                    if len(users) == 0:
-                        delay_random = random.randint(200, 300)
-                        self.logger.info(
-                            "Soft block on see followers, "
-                            "sleeping {} minutes and {} seconds".format(
-                                int(delay_random/60),
-                                delay_random % 60
-                            )
-                        )
-                        sleep(300)
-                self.logger.info("Grabbed {} usernames".format(len(users)))
-
-                # Interact with links instead of just storing them
-                for user in users[1:]:
-                    link = user.get_attribute("href")
-                    if link not in already_interacted_links:
-                        msg = ""
-                        try:
-                            user_text = user.text
-                            user_link2 = "https://www.instagram.com/{}".format(user_text)
-                            self.logger.info("Followed [{}/{}]".format(
-                                    interactions.followed,
-                                    actual_amount
-                                )
-                            )
-                            self.logger.info("Trying user {}".format(user_text.encode("utf-8")))
-                            nf_scroll_into_view(self, user)
-                            sleep(1)
-                            nf_click_center_of_element(self, user, user_link2)
-                            sleep(2)
-                            valid = False
-                            if (
-                                    user_text not in self.settings.dont_include
-                                    and not is_follow_restricted(self, user_text)
-                                    and random.randint(0, 100) <= random_chance
-                            ):
-                                valid, details = nf_validate_user_call(self, user_text)
-                                self.logger.info("Valid User: {}, details: {}".format(valid, details))
-                            if valid:
-                                follow_state, msg = follow_user(self, "profile", user_text)
-                                if follow_state is True:
-                                    interactions.followed += 1
-                                    self.logger.info("Followed '{}'".format(user_text))
-                                else:
-                                    self.logger.info("Not following")
-                                    sleep(1)
-                                if random.randint(0, 100) <= self.settings.user_interact_percentage:
-                                    self.logger.info(
-                                        "Going to interact with user '{}'".format(
-                                            user_text
-                                        )
-                                    )
-                                    # disable re-validating user in like_by_users
-                                    like_by_users(
-                                        self,
-                                        [user_text],
-                                        None,
-                                        True,
-                                    )
-                            else:
-                                interactions.not_valid_users += 1
-                        except Exception as e:
-                            self.logger.error(e)
-                        finally:
-                            sleep(5)
-                            nf_find_and_press_back(self, follow_link)
-                            in_follow_page = check_if_in_correct_page(self, follow_link)
-                            if not in_follow_page:
-                                in_user_page = check_if_in_correct_page(self, user_link)
-                                if not in_user_page:
-                                    nf_go_to_user_page(self, username)
-                                nf_go_to_follow_page(self, follow, username)
-
-                            already_interacted_links.append(link)
-                            if msg == "block on follow":
-                                pass  # TODO deal with block on follow
-                            break
-                else:
-                    # For loop ended means all users in screen has been interacted with
-                    scrolled_to_bottom = self.browser.execute_script(
-                        "return window.scrollMaxY == window.scrollY"
-                    )
-                    if scrolled_to_bottom and randomize and random_chance < 100:
-                        random_chance += 25
-                        self.browser.execute_script(
-                            "window.scrollTo(0, 0);"
-                        )
-                        update_activity(self.browser, state=None)
-                        sc_rolled += 1
-                        sleep(scroll_nap)
-                    elif scrolled_to_bottom:
-                        # already followed all possibles users
-                        break
-                    # will scroll the screen a bit and reload
-                    for i in range(3):
-                        self.browser.execute_script(
-                            "window.scrollTo(0, document.body.scrollHeight);"
-                        )
-                        update_activity(self.browser, state=None)
-                        sc_rolled += 1
-                        sleep(scroll_nap)
-
-        except Exception:
-            raise
-
-        sleep(3)
-        self.logger.info(
-            "Follow User {} [{}/{}] - ended".format(follow, index + 1, len(usernames))
-        )
-        self.logger.info(interactions.__str__)
-        self.interactions += interactions
-
-    return self
-
-
-def follow_by_list(
-        self: ICerebro,
-        follow_list: list,
-        users_validated: bool = False,
-):
-    if self.aborting:
-        return self
-
-    interactions = Interactions()
-
-    for index, username in enumerate(follow_list):
-        self.logger.info("Follow User [{}/{}] - started".format(index + 1, len(follow_list)))
-        if self.jumps.check_follows():
-            self.logger.warning(
-                "--> Follow quotient reached its peak!\t~leaving follow_by_list"
-            )
-            self.jumps.follows = 0
-            self.quotient_breach = True
-            break
-        if is_follow_restricted(self, username):
-            interactions.already_followed += 1
-            self.logger.info(
-                "Account {} already followed {} times".format(
-                    username,
-                    self.settings.follow_times
-                )
-            )
-            continue
-
-        if not users_validated:
-            validation, details = nf_validate_user_call(self, username)
-            if not validation:
-                self.logger.info(
-                    "--> Not a valid user: {}".format(details)
-                )
-                interactions.not_valid_users += 1
-                continue
-
-        follow_state, msg = follow_user(self, "profile", username)
-        if follow_state is True:
-            interactions.followed += 1
-            self.logger.info("user followed")
-        elif msg == "already followed":
-            interactions.already_followed += 1
-
-        elif msg == "jumped":
-            # will break the loop after certain consecutive jumps
-            self.jumps.follows += 1
-
-        if self.settings.do_like and random.randint(0, 100) <= self.settings.user_interact_percentage:
-            self.logger.info(
-                "Going to interact with user '{}'".format(username)
-            )
-            # disable re-validating user in like_by_users
-            like_by_users(
-                self,
-                [username],
-                None,
-                True,
-            )
-
-        self.logger.info(
-            "Follow User [{}/{}] - ended".format(index + 1, len(follow_list))
-        )
-
-    self.logger.info(interactions.__str__)
-    self.interactions += interactions
-
-
 def follow_user(
-        self: ICerebro,
+        self,
         track: str,
         user_name: str,
         button: Union[WebElement, None] = None
@@ -844,7 +243,7 @@ def follow_user(
     # list of available tracks to follow in: ["profile", "post" "dialog"]
 
     # check action availability
-    if quota_supervisor(C.FOLLOW) == C.JUMP:
+    if self.quota_supervisor.jump_follow():
         return False, "jumped"
 
     if track in ["profile", "post"]:
@@ -890,41 +289,14 @@ def follow_user(
 
     # general tasks after a successful follow
     self.logger.info("Followed '{}".format(user_name.encode("utf-8")))
-    update_activity(self, C.FOLLOW)
     add_follow_times(self, user_name)
-
-    # TODO: check how blacklist works
-    # if blacklist["enabled"] is True:
-    #     action = "followed"
-    #     add_user_to_blacklist(
-    #         user_name, blacklist["campaign"], action, logger, logfolder
-    #     )
-
-    # get the post-follow delay time to sleep
-    naply = get_action_delay(self, C.FOLLOW)
-    sleep(naply)
-
+    add_user_to_blacklist(self, user_name, self.quota_supervisor.FOLLOW)
+    self.quota_supervisor.add_follow()
     return True, "success"
 
 
-def add_follow_times(
-        self: ICerebro,
-        username: str
-):
-    bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=username)
-    bot_followed.times += 1
-    bot_followed.date = datetime.now()
-    bot_followed.save()
-
-def is_follow_restricted(
-        self: ICerebro,
-        username: str
-) -> bool:  # Followed username more than or equal than self.follow_times
-    bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=username)
-    return bot_followed.times >= self.settings.follow_times
-
 def get_followers(
-        self: ICerebro,
+        self,
         username: str
 ) -> list:  # list of followers of given username
     # TODO

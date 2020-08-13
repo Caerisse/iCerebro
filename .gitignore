@@ -5,4 +5,11 @@
 **/posts_source
 **/cookie.json
 **/workspace
-/iCerebro/instapy/
+!/geckodriver.log
+/.env
+/app_web/migrations/
+geckodriver.log
+iCerebro/util_comment.py
+iCerebro/util_commenters.py
+iCerebro/util_feed.py
+iCerebro/util_story.py
