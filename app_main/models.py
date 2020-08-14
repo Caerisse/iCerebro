@@ -167,8 +167,8 @@ class BotBlacklist(models.Model):
 class BotSettings(models.Model):
     objects = models.Manager()
 
-    icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE, related_name='bot_settings')
-    instauser = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='bot_settings')
+    icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE, related_name='bot_settings', null=True)
+    instauser = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='bot_settings', null=True)
     name = models.TextField(blank=False)
     # TODO: encrypt
     password = models.TextField(blank=False)
