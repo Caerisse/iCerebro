@@ -19,3 +19,11 @@ class BotSettingsForm(forms.ModelForm):
         model = BotSettings
         fields = '__all__'
         exclude = ['icerebrouser', 'running', 'instauser']
+
+
+class BotRunForm(forms.Form):
+    settings_name = forms.ChoiceField()
+
+    def __init__(self, bot_settings_name_list, *args, **kwargs):
+        super(BotRunForm, self).__init__(*args, **kwargs)
+        self.fields['settings_name'] = forms.ChoiceField(choices=bot_settings_name_list)

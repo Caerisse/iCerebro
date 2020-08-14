@@ -80,11 +80,12 @@ def bot_settings_view(request, username=None, settings_name=None):
             raise Http404("Bot does not exist")
     if request.POST:
         form_args['data'] = request.POST
+        insta_username = form_args['data']['insta_username']
         bot_settings_form = BotSettingsForm(**form_args)
         if bot_settings_form.is_valid():
-            bot_settings = bot_settings_form.save(commit=True)
+            bot_settings = bot_settings_form.save(commit=False)
             bot_settings.icerebrouser = user
-            bot_settings.instauser, _ = InstaUser.objects.get_or_create(username=bot_settings.insta_username)
+            bot_settings.instauser, _ = InstaUser.objects.get_or_create(username=insta_username)
             bot_settings.save()
             return redirect("/bot/run/{}/".format(bot_settings.instauser.username))
     else:
@@ -100,14 +101,36 @@ def bot_run(request, username):
     except ObjectDoesNotExist:
         raise Http404("User does not exist")
     try:
+        bot_settings_name_list = []
+        running_with = None
         bot_account = InstaUser.objects.get(username=username)
         bot_settings_list = BotSettings.objects.filter(icerebrouser=user, instauser=bot_account)
+        for bot_settings in bot_settings_list:
+            bot_settings_name_list.append((bot_settings.pk, bot_settings.name))
+            if bot_settings.running:
+                running_with = bot_settings
+        bot_run_form = BotRunForm(tuple(bot_settings_name_list))
     except ObjectDoesNotExist:
         raise Http404("Bot does not exist")
-    bot_logs = StatusLog.objects.filter(bot_username=bot_account.instauser.username)[:10]
+    if request.POST:
+        if running_with:
+            running_with.running = False
+            running_with.save()
+            running_with = None
+            # TODO: Stop bot
+        else:
+            running_with = BotSettings.objects.get(pk=request.POST['settings_name'])
+            running_with.running = True
+            running_with.save()
+            # TODO: Start bot
+    bot_logs = StatusLog.objects.filter(bot_username=bot_account.username)[:10]
     latest_logs = reversed(bot_logs)
     return render(request, 'bot_run.html',
-                  {'bot_settings_list': bot_settings_list, 'latest_logs': latest_logs}
+                  {
+                      'bot_run_form': bot_run_form,
+                      'latest_logs': latest_logs,
+                      'running_with': running_with.name if running_with else None
+                  }
                   )
 
 

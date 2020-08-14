@@ -3,6 +3,30 @@
 
 {% block content %}
 
-
+<p>Run instance of {{bot_settings_list.first.instauser.username}}</p>
+{% if running_with != None %}
+    <p>"Bot is running with settings {{running_with}}""</p>
+{% endif %}
+<p>Choose settings</p>
+<form action="" method="post">
+    {% csrf_token %}
+        {% csrf_token %}
+        {{bot_run_form}}
+<!--        {% for bot_settings in bot_settings_list %}-->
+<!--        <option name="bot_settings" value="{{bot_settings.name}}">{{bot_settings.name}}</option>-->
+<!--        {% endfor %}-->
+    </select>
+    {% if running_with == None %}
+        <input type="submit" value="Run">
+    {% else %}
+        <input type="submit" value="Stop">
+    {% endif %}
+</form>
+<p>Logs:</p>
+<ul>
+    {% for log in latest_logs %}
+    <li>{{log}}</li>
+    {% endfor %}
+</ul>
 
 {% endblock %}
