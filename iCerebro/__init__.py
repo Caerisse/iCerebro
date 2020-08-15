@@ -1,5 +1,5 @@
-import logging
 import random
+import threading
 from datetime import datetime, timedelta
 from time import sleep, time
 from typing import List, Union
@@ -25,6 +25,7 @@ from iCerebro.util_db import is_follow_restricted
 from iCerebro.util_follow import follow_user, get_followers, unfollow_loop
 from iCerebro.util_like import like_loop
 from iCerebro.util_login import login_user
+from iCerebro.IceLogger import IceLogger
 
 
 class ICerebro:
@@ -33,21 +34,21 @@ class ICerebro:
             self,
             settings: BotSettings
     ):
+        self.thread = None
         self.start_time = time()
         self.settings = settings
         self.instauser = self.settings.instauser
         self.username = self.settings.instauser.username
 
+        # TODO: replace logger with custom class to always add the extra parameter
+        self.logger = IceLogger(self.username)
+
         self.followed_by = 0
         self.following_num = 0
         self.active_users = []
 
-        self.display = Display(visible=0, size=(800, 600))
-        self.display.start()
-
-        self.browser, err_msg = set_selenium_local_session(self)
-        if len(err_msg) > 0:
-            raise Exception(err_msg)
+        self.display = None
+        self.browser = None
 
         self.interactions = Interactions()
 
@@ -61,14 +62,36 @@ class ICerebro:
 
         self.aborting = False
 
-        self.logger = logging.getLogger('db')
-        self.extra = {'bot_username': self.username}
-
         if self.settings.use_image_analysis:
             self.ImgAn = ImageAnalysis()
             #    self.settings.classification_model_name, self.settings.detection_model_name)
         else:
             self.ImgAn = None
+
+    def start(self):
+        self.logger.info("iCerebro Started")
+        self.settings.running = True
+        self.settings.save()
+        self.thread = threading.Thread(target=self.run, args=())
+        self.thread.daemon = True
+        self.thread.start()
+
+    def stop(self):
+        self.logger.info("iCerebro will stop soon")
+        self.settings.running = False
+        self.settings.save()
+        self.aborting = True
+
+    def run(self):
+        return
+        # self.display = Display(visible=0, size=(800, 600))
+        # self.display.start()
+        self.browser = set_selenium_local_session(self)
+        self.login()
+        self.like_by_tags(random.sample(self.settings.hashtags, 3), 5)
+        while self.settings.running:
+            # TODO, add settings about what to do while running
+            self.like_by_feed(10)
 
     def login(self):
         """Used to login the user with username and password"""
@@ -157,7 +180,7 @@ class ICerebro:
             self.logger.info(
                 "Like by Tag [{}/{}]: {} - ended".format(index + 1, len(tags), tag.encode("utf-8"))
             )
-            self.logger.info(interactions.__str__)
+            self.logger.info(str(interactions))
             self.interactions += interactions
 
         return self
@@ -208,7 +231,7 @@ class ICerebro:
                     index + 1, len(usernames), username.encode("utf-8")
                 )
             )
-            self.logger.info(interactions.__str__)
+            self.logger.info(str(interactions))
             self.interactions += interactions
 
         return self
@@ -224,7 +247,7 @@ class ICerebro:
         go_to_feed(self)
         interactions = like_loop(self, "Feed", "https://www.instagram.com/", amount, True)
         self.logger.info("Like by Feed - ended")
-        self.logger.info(interactions.__str__)
+        self.logger.info(str(interactions))
         self.interactions += interactions
         return self
 
@@ -413,7 +436,7 @@ class ICerebro:
             self.logger.info(
                 "Follow User {} [{}/{}] - ended".format(follow, index + 1, len(usernames))
             )
-            self.logger.info(interactions.__str__)
+            self.logger.info(str(interactions))
             self.interactions += interactions
 
         return self
@@ -482,7 +505,7 @@ class ICerebro:
                 "Follow User [{}/{}] - ended".format(index + 1, len(follow_list))
             )
 
-        self.logger.info(interactions.__str__)
+        self.logger.info(str(interactions))
         self.interactions += interactions
         return self
 

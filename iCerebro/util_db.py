@@ -11,7 +11,6 @@ from emoji.unicode_codes import UNICODE_EMOJI
 from selenium.common.exceptions import WebDriverException, NoSuchElementException, InvalidSelectorException
 
 from app_main.models import InstaUser, BotBlacklist, BotFollowed, BotCookies, Post, Comment
-from iCerebro import ICerebro
 
 
 def store_user(
@@ -45,20 +44,24 @@ def store_post(
         classified_as: str = None
 ) -> Post:
     user, _ = InstaUser.objects.get_or_create(username=username_text)
-    post, created = Post.objects.update_or_create(
-        link=post_link,
-        defaults={
-            'instauser': user,
-            'date_posted': post_date,
-            'src': image_links,
-            'caption': caption,
-            'likes': likes_count,
-            'ig_desciption': image_descriptions,
-            'objects_detected': objects_detected,
-            'classified_as': classified_as
-        }
-    )
-    post.save()
+    post = None
+    try:
+        post, created = Post.objects.update_or_create(
+            link=post_link,
+            defaults={
+                'instauser': user,
+                'date_posted': post_date,
+                'src': image_links,
+                'caption': caption.encode("utf-8"),
+                'likes': likes_count,
+                'ig_desciption': image_descriptions,
+                'objects_detected': objects_detected,
+                'classified_as': classified_as
+            }
+        )
+    except Exception as e:
+        print(e)
+    #post.save()
     return post
 
 
@@ -66,7 +69,7 @@ def store_comments(self, post):
     pass
 
 
-def add_user_to_blacklist(self: ICerebro, username: str, action: str):
+def add_user_to_blacklist(self, username: str, action: str):
     if self.settings.blacklist_campaign is None or self.settings.blacklist_campaign.strip() == "":
         return
     user, _ = InstaUser.objects.get_or_create(username=username)
@@ -90,7 +93,7 @@ def add_user_to_blacklist(self: ICerebro, username: str, action: str):
         )
 
 
-def is_in_blacklist(self: ICerebro, username: str, action: str) -> bool:
+def is_in_blacklist(self, username: str, action: str) -> bool:
     if self.settings.blacklist_campaign is None or self.settings.blacklist_campaign.strip() == "":
         return False
     user, _ = InstaUser.objects.get_or_create(username=username)
@@ -107,7 +110,7 @@ def is_in_blacklist(self: ICerebro, username: str, action: str) -> bool:
 
 
 def add_follow_times(
-        self: ICerebro,
+        self,
         username: str
 ):
     bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=username)
@@ -116,14 +119,14 @@ def add_follow_times(
 
 
 def is_follow_restricted(
-        self: ICerebro,
+        self,
         username: str
 ) -> bool:  # Followed username more than or equal than self.follow_times
     bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=username)
     return bot_followed.times >= self.settings.follow_times
 
 
-def get_cookies(self: ICerebro) -> List[Dict[str, str]]:
+def get_cookies(self) -> List[Dict[str, str]]:
     cookies = []
     for cookie in BotCookies.objects.filter(bot=self.instauser):
         cookies.append(
@@ -135,9 +138,9 @@ def get_cookies(self: ICerebro) -> List[Dict[str, str]]:
     return cookies
 
 
-def save_cookies(self: ICerebro, cookies: List[Dict[str, str]]):
+def save_cookies(self, cookies: List[Dict[str, str]]):
     for cookie in cookies:
-        BotFollowed.objects.update_or_create(
+        BotCookies.objects.update_or_create(
             bot=self.instauser,
             cookie_name=cookie["name"],
             defaults={

@@ -13,8 +13,7 @@ from iCerebro.navigation import nf_scroll_into_view, nf_click_center_of_element,
     check_if_in_correct_page, nf_go_from_post_to_profile
 from iCerebro.util import Interactions, nf_get_all_posts_on_element, nf_validate_user_call, check_character_set, \
     get_user_data, format_number, extract_text_from_element, explicit_wait
-from iCerebro.util_comment import process_comments
-from iCerebro.util_db import store_post, store_comments, add_user_to_blacklist, is_follow_restricted
+from iCerebro.util_db import store_post, store_comments, add_user_to_blacklist, is_follow_restricted, deform_emojis
 from iCerebro.util_follow import follow_user
 
 from selenium.common.exceptions import WebDriverException
@@ -35,7 +34,9 @@ def like_loop(
     already_interacted_links = []
     interactions = Interactions()
     try:
+        print(interactions.liked_img)
         while interactions.liked_img in range(0, amount):
+            print(interactions.liked_img)
             if self.jumps.check_likes():
                 self.logger.warning(
                     "Like quotient reached its peak, leaving Like By {} activity".format(what)
@@ -84,7 +85,9 @@ def like_loop(
                         amount,
                         users_validated
                     )
+                    print(interactions.liked_img)
                     interactions += post_interactions
+                    print(interactions.liked_img)
                     sleep(1)
                     nf_find_and_press_back(self, base_link)
                     already_interacted_links.append(link)
@@ -171,9 +174,10 @@ def interact_with_post(
                 ):
                     comments = self.settings.comments
                     comments.append(self.settings.video_comments if is_video else self.settings.photo_comments)
-                    success = process_comments(self, user_name, comments, temp_comments)
-                    if success:
-                        interactions.commented += 1
+                    # TODO: util_comment
+                    # success = process_comments(self, user_name, comments, temp_comments)
+                    # if success:
+                    #     interactions.commented += 1
                 else:
                     self.logger.info("Not commented")
                     sleep(1)
@@ -293,6 +297,7 @@ def check_post(
 
         caption = self.browser.find_element_by_xpath(XP.POST_CAPTION).text
         caption = "" if caption is None else caption
+        caption, _ = deform_emojis(caption)
 
         for image in images:
             image_description = image.get_attribute('alt')
@@ -352,7 +357,7 @@ def check_post(
                     is_video,
                     image_links,
                     "Mandatory language not fulfilled",
-                    "Not mandatory " "language",
+                    "Not mandatory language character found",
                 )
 
         # Append location to image_text so we can search through both in one go
@@ -421,9 +426,12 @@ def check_post(
             post_date = datetime.fromisoformat(post_date[:-1])
         except NoSuchElementException:
             post_date = datetime.now()
+        self.logger.info("Storing Post")
         post = store_post(post_link, username_text, post_date, image_links,
                           caption, likes_count, image_descriptions)
+        self.logger.info("Storing Comments")
         store_comments(self, post)
+        self.logger.info("Checking elapsed time")
         elapsed_time = perf_counter() - t
         self.logger.info("Check post elapsed time: {:.0f} seconds".format(elapsed_time))
 

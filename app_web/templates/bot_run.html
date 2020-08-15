@@ -3,30 +3,40 @@
 
 {% block content %}
 
-<p>Run instance of {{bot_settings_list.first.instauser.username}}</p>
+<p>Run instance of {{bot_username}}</p>
 {% if running_with != None %}
-    <p>"Bot is running with settings {{running_with}}""</p>
+    <p>Bot is running with settings {{running_with}}</p>
 {% endif %}
-<p>Choose settings</p>
+<p>Choose settings:</p>
 <form action="" method="post">
     {% csrf_token %}
-        {% csrf_token %}
-        {{bot_run_form}}
-<!--        {% for bot_settings in bot_settings_list %}-->
-<!--        <option name="bot_settings" value="{{bot_settings.name}}">{{bot_settings.name}}</option>-->
-<!--        {% endfor %}-->
-    </select>
+    {{bot_run_form}}
     {% if running_with == None %}
         <input type="submit" value="Run">
     {% else %}
         <input type="submit" value="Stop">
     {% endif %}
 </form>
-<p>Logs:</p>
-<ul>
-    {% for log in latest_logs %}
-    <li>{{log}}</li>
-    {% endfor %}
-</ul>
+
+<!--{% if running_with != None %}-->
+<!--<head>-->
+<!--    <script src="http://code.jquery.com/jquery-latest.min.js"></script>-->
+<!--</head>-->
+
+<!--<body>-->
+<!--[<div id="console"></div>]-->
+<!--<script>-->
+<!--$(document).ready(function() {-->
+<!--  $.ajaxSetup({ cache: false });-->
+<!--  var my_refresh = setInterval(function() {-->
+<!--    $('#console').load('/bot/run/{{bot_username}}/get_latest_logs');-->
+<!--  }, 1000);-->
+<!--});-->
+
+<!--</script>-->
+<!--</body>-->
+<!--{% endif %}-->
+
+
 
 {% endblock %}

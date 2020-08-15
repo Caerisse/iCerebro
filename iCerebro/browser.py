@@ -14,13 +14,15 @@ from time import sleep
 from iCerebro.util import interruption_handler
 
 
-# TODO
 def use_assets():
-    return ""
+    # TODO: change as appropriate to server
+    return os.getcwd()
 
 
 def get_geckodriver():
     # prefer using geckodriver from path
+    if os.path.isfile('./geckodriver'):
+        return './geckodriver'
     gecko_path = shutil.which("geckodriver") or shutil.which("geckodriver.exe")
     if gecko_path:
         return gecko_path
@@ -59,7 +61,8 @@ def set_selenium_local_session(
     firefox_options = Firefox_Options()
 
     #if self.settings.headless_browser:
-    firefox_options.add_argument("-headless")
+    # TODO: remove comment before commiting to server
+    #firefox_options.add_argument("-headless")
 
     firefox_profile = webdriver.FirefoxProfile()
 
@@ -72,7 +75,7 @@ def set_selenium_local_session(
         # this setting can improve pageload & save bandwidth
         firefox_profile.set_preference("permissions.default.image", 2)
 
-    # TODO: check hoe this could work with django
+    # TODO: check how this could work with django
     # if self.settings.proxy_address and self.settings.proxy_port:
     #     firefox_profile.set_preference("network.proxy.type", 1)
     #     firefox_profile.set_preference("network.proxy.http", proxy_address)
@@ -102,9 +105,7 @@ def set_selenium_local_session(
     # set mobile viewport (iPhone X)
     browser.set_window_size(375, 812)
 
-    self.logger.info(
-        "Selenium session started",
-        extra=self.extra)
+    self.logger.info("Selenium session started")
 
     return browser
 

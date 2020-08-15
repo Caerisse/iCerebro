@@ -10,7 +10,6 @@ from selenium.common.exceptions import MoveTargetOutOfBoundsException
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-from iCerebro import ICerebro
 from iCerebro.navigation import web_address_navigator
 from iCerebro.navigation import nf_click_center_of_element
 from iCerebro.util import check_authorization
@@ -19,7 +18,7 @@ from iCerebro.util_db import get_cookies, save_cookies
 
 
 def bypass_suspicious_login(
-        self: ICerebro
+        self
 ) -> bool:  # success
     """ Bypass suspicious login attempt verification. """
 
@@ -93,7 +92,7 @@ def bypass_suspicious_login(
     return True
 
 
-def check_browser(self: ICerebro) -> bool:  # success
+def check_browser(self) -> bool:  # success
     # check connection status
     try:
         self.logger.info("Connection Checklist [1/3] (Internet Connection Status)")
@@ -157,7 +156,7 @@ def check_browser(self: ICerebro) -> bool:  # success
 
 
 def login_user(
-    self: ICerebro
+    self
 ) -> bool:  # success
     """Logins the user with the given username and password"""
 
@@ -202,7 +201,7 @@ def login_user(
 
     if login_elem is not None:
         try:
-            nf_click_center_of_element(self, login_elem)
+            self.browser.execute_script("arguments[0].click();", login_elem)
         except MoveTargetOutOfBoundsException:
             login_elem.click()
             self.quota_supervisor.add_server_call()
@@ -212,8 +211,9 @@ def login_user(
     # (valid for placeholder too)
 
     # wait until it navigates to the login page
-    login_page_title = "Login"
-    explicit_wait(self, "TC", login_page_title)
+    # Instagram changed this, no longer needed
+    # login_page_title = "Login"
+    # explicit_wait(self, "TC", login_page_title)
 
     # wait until the 'username' input element is located and visible
     explicit_wait(self, "VOEL", [XP.INPUT_USERNAME_XP, "XPath"])
@@ -334,7 +334,7 @@ def dismiss_notification_offer(self):
         nf_click_center_of_element(self, dismiss_elem)
 
 
-def dismiss_this_was_me(self: ICerebro):
+def dismiss_this_was_me(self):
     try:
         # click on "This was me" button if challenge page was called
         this_was_me_button = self.browser.find_element_by_xpath(XP.THIS_WAS_ME_BUTTON)

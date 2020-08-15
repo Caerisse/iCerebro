@@ -23,7 +23,7 @@ class StatusLog(models.Model):
     create_datetime = models.DateTimeField(auto_now_add=True, verbose_name='Created at')
 
     def __str__(self):
-        return self.msg
+        return '{} - {}'.format(self.level, self.msg)
 
     class Meta:
         ordering = ('-create_datetime',)

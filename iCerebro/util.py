@@ -1,4 +1,6 @@
+import signal
 import unicodedata
+from contextlib import contextmanager
 from time import sleep, time
 import random
 import re
@@ -17,7 +19,6 @@ from selenium.common.exceptions import TimeoutException
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-from iCerebro import ICerebro
 from iCerebro.navigation import nf_click_center_of_element, get_current_url, \
     nf_go_from_post_to_profile, nf_find_and_press_back, go_to_bot_user_page, nf_go_to_user_page, nf_scroll_into_view, \
     check_if_in_correct_page
@@ -142,14 +143,14 @@ def nf_get_all_posts_on_element(
 
 
 def nf_get_all_users_on_element(
-        self: ICerebro
+        self
 ) -> List[WebElement]:
     # return element.find_elements_by_xpath('//li/div/div[1]/div[2]/div[1]/a')
     return self.browser.find_elements_by_xpath(XP.USERS_ON_ELEMENT)
 
 
 def nf_validate_user_call(
-        self: ICerebro,
+        self,
         username: str,
         action: str,
         post_link: str = None,
@@ -375,7 +376,7 @@ def nf_validate_user_call(
 
 
 def is_private_profile(
-        self: ICerebro,
+        self,
         following=True
 ):
     try:
@@ -390,7 +391,7 @@ def is_private_profile(
     return is_private
 
 
-def get_number_of_posts(self: ICerebro):
+def get_number_of_posts(self):
     """Get the number of posts from the profile screen"""
     num_of_posts = None
     try:
@@ -412,7 +413,7 @@ def get_number_of_posts(self: ICerebro):
 
 
 def get_user_data(
-        self: ICerebro,
+        self,
         query: str,
         base_query: str = JS.BASE_QUERY_1,
 ):
@@ -427,7 +428,7 @@ def get_user_data(
 
 # TODO: rewrite so it uses less graphql
 def get_active_users(
-        self: ICerebro,
+        self,
         username: str,
         posts_amount: int,
         boundary: int = None
@@ -518,7 +519,7 @@ def get_active_users(
 
 
 def get_likers(
-        self: ICerebro,
+        self,
         link: str,
         boundary: int = None
 ) -> Tuple[bool, list]:
@@ -655,7 +656,7 @@ def get_users_from_dialog(old_data: list, dialog: WebElement):
     return new_data
 
 
-def close_dialog_box(self: ICerebro):
+def close_dialog_box(self):
     """ Click on the close button spec. in the 'Likes' dialog box """
     try:
         close = self.browser.find_element_by_xpath(XP.LIKES_DIALOG_CLOSE_XPATH)
@@ -781,7 +782,7 @@ def get_relationship_counts(self, username):
     return followers_count, following_count
 
 
-def emergency_exit(self: ICerebro):
+def emergency_exit(self):
     """ Raise emergency if the is no connection to server OR if user is not
     logged in """
     server_address = "instagram.com"
@@ -835,7 +836,7 @@ def ping_server(host, logger):
     return True
 
 
-def explicit_wait(self: ICerebro, track, ec_params, timeout=35, notify=True):
+def explicit_wait(self, track, ec_params, timeout=35, notify=True):
     """
     Explicitly wait until expected condition validates
 
@@ -904,7 +905,7 @@ def explicit_wait(self: ICerebro, track, ec_params, timeout=35, notify=True):
     return result
 
 
-def is_page_available(self: ICerebro):
+def is_page_available(self):
     """ Check if the page is available and valid """
     expected_keywords = ["Page Not Found", "Content Unavailable"]
     page_title = get_page_title(self)
@@ -925,7 +926,7 @@ def is_page_available(self: ICerebro):
     return True
 
 
-def get_page_title(self: ICerebro):
+def get_page_title(self):
     """ Get the title of the web page """
     # wait for the current page fully load to get the correct page's title
     explicit_wait(self, "PFL", [], 10)
@@ -969,7 +970,7 @@ def check_character_set(self, unistr):
     )
 
 
-def check_authorization(self: ICerebro, method, notify=True):
+def check_authorization(self, method, notify=True):
     """ Check if user is NOW logged in """
     if notify is True:
         self.logger.info("Checking if '{}' is logged in".format(self.username))
@@ -1010,28 +1011,26 @@ def check_authorization(self: ICerebro, method, notify=True):
 
 # TODO: check all bellow here (remove if unused, rewrite if used)
 
-# @contextmanager
-# def interruption_handler(
-#     threaded=False,
-#     SIG_type=signal.SIGINT,
-#     handler=signal.SIG_IGN,
-#     notify=None,
-#     logger=None,
-# ):
-#     """ Handles external interrupt, usually initiated by the user like
-#     KeyboardInterrupt with CTRL+C """
-#     if notify is not None and logger is not None:
-#         logger.warning(notify)
-#
-#     if not threaded:
-#         original_handler = signal.signal(SIG_type, handler)
-#
-#     try:
-#         yield
-#
-#     finally:
-#         if not threaded:
-#             signal.signal(SIG_type, original_handler)
+@contextmanager
+def interruption_handler(
+    threaded=False,
+    SIG_type=signal.SIGINT,
+    handler=signal.SIG_IGN,
+    notify=None,
+    logger=None,
+):
+    """ Handles external interrupt, usually initiated by the user like
+    KeyboardInterrupt with CTRL+C """
+    if notify is not None and logger is not None:
+        logger.warning(notify)
+
+    if not threaded:
+        original_handler = signal.signal(SIG_type, handler)
+    try:
+        yield
+    finally:
+        if not threaded:
+            signal.signal(SIG_type, original_handler)
 #
 #
 

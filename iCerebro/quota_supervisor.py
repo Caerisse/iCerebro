@@ -3,8 +3,6 @@ from time import sleep
 from datetime import datetime
 import random
 
-from iCerebro import ICerebro
-
 
 class QuotaSupervisor:
     SERVER_CALL = "server_call"
@@ -17,7 +15,7 @@ class QuotaSupervisor:
     HOUR = "hour"
     DAY = "day"
 
-    def __init__(self, iCerebro: ICerebro):
+    def __init__(self, iCerebro):
         self.logger = iCerebro.logger
         self.settings = iCerebro.settings
         self.enabled = self.settings.quota_supervisor_enabled

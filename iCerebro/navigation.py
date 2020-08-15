@@ -5,10 +5,8 @@ from selenium.common.exceptions import NoSuchElementException, StaleElementRefer
 from selenium.webdriver import ActionChains
 from selenium.webdriver.remote.webelement import WebElement
 
-from iCerebro import ICerebro
 
 # TODO: add server calls
-
 def get_current_url(browser):
     """ Get URL of the loaded web page """
     try:
@@ -21,7 +19,7 @@ def get_current_url(browser):
     return current_url
 
 
-def web_address_navigator(self: ICerebro, link):
+def web_address_navigator(self, link):
     """Checks and compares current URL of web page and the URL to be
     navigated and if it is different, it does navigate"""
     current_url = get_current_url(self.browser)
