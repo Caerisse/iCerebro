@@ -8,11 +8,10 @@ from typing import List
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-import iCerebro.constants_css_selectors as CS
 from iCerebro.navigation import nf_scroll_into_view, nf_click_center_of_element, nf_find_and_press_back, \
     check_if_in_correct_page, nf_go_from_post_to_profile
 from iCerebro.util import Interactions, nf_get_all_posts_on_element, nf_validate_user_call, check_character_set, \
-    get_user_data, format_number, extract_text_from_element, explicit_wait
+    get_user_data, format_number, extract_text_from_element, explicit_wait, get_like_count
 from iCerebro.util_db import store_post, store_comments, add_user_to_blacklist, is_follow_restricted, deform_emojis
 from iCerebro.util_follow import follow_user
 
@@ -433,23 +432,6 @@ def check_post(
         elapsed_time = perf_counter() - t
         self.logger.info("Check post elapsed time: {:.0f} seconds".format(elapsed_time))
 
-
-def get_like_count(
-        self,
-) -> int:
-    try:
-        return get_user_data(self, JS.LIKERS_COUNT)
-    except WebDriverException:
-        try:
-            likes_count = self.browser.find_element_by_css_selector(CS.LIKES_COUNT).text
-            if likes_count:
-                return format_number(likes_count)
-            else:
-                self.logger.info("Failed to check likes count, empty string")
-                return -1
-        except NoSuchElementException:
-            self.logger.info("Failed to check likes count")
-            return -1
 
 
 def like_image(self, username):

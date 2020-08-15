@@ -19,11 +19,11 @@ from selenium.common.exceptions import TimeoutException
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
+import iCerebro.constants_css_selectors as CS
 from iCerebro.navigation import nf_click_center_of_element, get_current_url, \
     nf_go_from_post_to_profile, nf_find_and_press_back, go_to_bot_user_page, nf_go_to_user_page, nf_scroll_into_view, \
     check_if_in_correct_page
 from iCerebro.util_db import store_user, is_in_blacklist
-from app_main.models import BotSettings
 
 default_profile_pic_instagram = [
     "https://instagram.flas1-2.fna.fbcdn.net/vp"
@@ -198,10 +198,12 @@ def nf_validate_user_call(
 
     try:
         if post_link:
+            self.logger.debug("Navigating to user page")
             nf_go_from_post_to_profile(self, username)
         self.logger.debug("Checking user page")
         # Checks the potential of target user by relationship status in order
         # to delimit actions within the desired boundary
+        self.logger.debug("followers/following")
         if (
                 self.settings.potency_ratio
                 or self.settings.delimit_by_numbers
@@ -241,7 +243,7 @@ def nf_validate_user_call(
                     username,
                     followers_count if followers_count else "unknown",
                     following_count if following_count else "unknown",
-                    "{.2f}".format(relationship_ratio) if relationship_ratio else "unknown",
+                    "{:.2f}".format(relationship_ratio) if relationship_ratio else "unknown",
                 )
             )
 
@@ -272,6 +274,7 @@ def nf_validate_user_call(
                                 return False, "'{}'s following count is less than " \
                                               "minimum limit".format(username)
 
+        self.logger.debug("number_of_posts")
         if self.settings.min_posts or self.settings.max_posts:
             # if you are interested in relationship number of posts boundaries
             try:
@@ -297,6 +300,7 @@ def nf_validate_user_call(
 
         # Skip users
         # skip private
+        self.logger.debug("skip_private")
         if self.settings.skip_private:
             try:
                 self.browser.find_element_by_xpath(XP.IS_PRIVATE_PROFILE)
@@ -307,6 +311,7 @@ def nf_validate_user_call(
                 return False, "{} is private account, skipping".format(username)
 
         # skip no profile pic
+        self.logger.debug("skip_no_profile_pic")
         if self.settings.skip_no_profile_pic:
             try:
                 profile_pic = get_user_data(self, JS.PROFILE_PIC)
@@ -321,6 +326,7 @@ def nf_validate_user_call(
                 return False, "{} has default instagram profile picture".format(username)
 
         # skip business
+        self.logger.debug("skip_business")
         if self.settings.skip_business or self.settings.skip_non_business:
             # if is business account skip under conditions
             try:
@@ -349,6 +355,7 @@ def nf_validate_user_call(
                     elif random.randint(0, 100) <= self.settings.skip_business_percentage:
                         return False, "'{}' is business account, skipping".format(username)
 
+        self.logger.debug("skip_bio_keyword")
         if len(self.settings.skip_bio_keyword) != 0:
             # if contain stop words then skip
             try:
@@ -371,8 +378,10 @@ def nf_validate_user_call(
     except NoSuchElementException:
         return False, "Unable to locate element"
     finally:
+        self.logger.debug("store_user")
         store_user(username, followers_count, following_count, number_of_posts)
         if post_link:
+            self.logger.debug("going back to post")
             nf_find_and_press_back(self, post_link)
 
 
@@ -393,6 +402,7 @@ def is_private_profile(
 
 
 def get_number_of_posts(self):
+    self.logger.debug("get_number_of_posts")
     """Get the number of posts from the profile screen"""
     num_of_posts = None
     try:
@@ -416,14 +426,16 @@ def get_number_of_posts(self):
 def get_user_data(
         self,
         query: str,
-        base_query: str = JS.BASE_QUERY_1,
+        base_query_1: str = JS.BASE_QUERY_1,
+        base_query_2: str = JS.BASE_QUERY_2,
 ):
+    self.logger.debug("get_user_data")
     try:
-        data = self.browser.execute_script(base_query + query)
+        data = self.browser.execute_script(base_query_1 + query)
     except WebDriverException:
         self.browser.execute_script(JS.RELOAD)
         self.quota_supervisor.add_server_call()
-        data = self.browser.execute_script(JS.BASE_QUERY_2 + query)
+        data = self.browser.execute_script(base_query_2 + query)
     return data
 
 
@@ -434,6 +446,7 @@ def get_active_users(
         posts_amount: int,
         boundary: int = None
 ):
+    self.logger.debug("get_active_users")
     """Returns a list with usernames who liked the latest n posts"""
     start_time = time()
     user_link = "https://www.instagram.com/{}/".format(username)
@@ -519,24 +532,40 @@ def get_active_users(
     return active_users
 
 
+def get_like_count(
+        self,
+) -> int:
+    try:
+        likes_count = self.browser.find_element_by_xpath(XP.LIKERS_COUNT).text
+    except NoSuchElementException:
+        likes_count = None
+    if likes_count:
+        self.logger.debug("likes_count: {}".format(likes_count))
+        return format_number(likes_count)
+    else:
+        try:
+            return get_user_data(self, JS.LIKERS_COUNT, base_query_2=JS.ENTRY_DATA)
+        except WebDriverException:
+            try:
+                likes_count = self.browser.find_element_by_css_selector(CS.LIKES_COUNT).text
+                if likes_count:
+                    self.logger.debug("likes_count: {}".format(likes_count))
+                    return format_number(likes_count)
+                else:
+                    self.logger.info("Failed to check likes count, empty string")
+                    return 0
+            except NoSuchElementException:
+                self.logger.info("Failed to check likes count")
+                return 0
+
+
 def get_likers(
         self,
         link: str,
         boundary: int = None
 ) -> Tuple[bool, list]:
-    try:
-        likers_count = self.browser.find_element_by_xpath(XP.LIKERS_COUNT).text
-        if likers_count:  # prevent an empty string scenarios
-            likers_count = format_number(likers_count)
-            # liked by 'username' AND 165 others (166 in total)
-            likers_count += 1
-        else:
-            self.logger.info("Failed to get likers count for post {}".format(link))
-            likers_count = None
-    except NoSuchElementException:
-        self.logger.info("Failed to get likers count for post {}".format(link))
-        likers_count = None
-
+    self.logger.debug("get_likers")
+    likers_count = get_like_count(self)
     try:
         likes_button = self.browser.find_elements_by_xpath(XP.LIKES_BUTTON)
         if likes_button:
@@ -560,7 +589,7 @@ def get_likers(
     sc_rolled = 0
     too_many_requests = 0
 
-    if likers_count:
+    if likers_count != -1:
         amount = (
             likers_count
             if boundary is None
@@ -756,7 +785,7 @@ def get_relationship_counts(self, username):
     except WebDriverException:
         try:
             following_count = format_number(
-                self.browser.find_element_by_xpath(XP.FOLLOWING_COUNT)
+                self.browser.find_element_by_xpath(XP.FOLLOWING_COUNT).text
             )
         except NoSuchElementException:
             try:

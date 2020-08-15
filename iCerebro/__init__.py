@@ -82,15 +82,15 @@ class ICerebro:
         self.aborting = True
 
     def run(self):
-        return
+        # return
         # self.display = Display(visible=0, size=(800, 600))
         # self.display.start()
         self.browser = set_selenium_local_session(self)
         self.login()
-        self.like_by_tags(random.sample(self.settings.hashtags, 3), 5)
-        while self.settings.running:
-            # TODO, add settings about what to do while running
-            self.like_by_feed(10)
+        self.like_by_tags(random.sample(self.settings.hashtags, 3), 2)
+        # while self.settings.running:
+        #     # TODO, add settings about what to do while running
+        #     self.like_by_feed(10)
 
     def login(self):
         """Used to login the user with username and password"""

@@ -102,6 +102,7 @@ def nf_go_to_user_page(
         self,
         username: str
 ):
+    self.logger.debug("Go to user page of user: {}".format(username))
     """Navigates to the provided user page by typing its name on explore"""
     user_link = "https://www.instagram.com/{}/".format(username)
     try:
@@ -121,6 +122,7 @@ def nf_type_on_explore(
         self,
         text: str
 ):
+    self.logger.debug("type on explore: {}".format(text))
     # clicking explore
     explore = self.browser.find_element_by_xpath(
         "/html/body/div[1]/section/nav[2]/div/div/div[2]/div/div/div[2]"
@@ -152,11 +154,14 @@ def nf_scroll_into_view(
 def nf_click_center_of_element(
         self,
         element: WebElement,
-        desired_link: str = None
+        desired_link: str = None,
+        disable_navigation: bool = False
 ):
     """Moves pointer to center of element and then clicks"""
     if not desired_link:
         desired_link = get_current_url(self.browser)
+    self.logger.debug("Click center of element to link: {}".format(desired_link))
+    self.logger.debug("Trying click")
     (
         ActionChains(self.browser)
         .move_to_element(element)
@@ -168,13 +173,16 @@ def nf_click_center_of_element(
         .perform()
     )
     try:
-        sleep(1)
+        sleep(2)
         if not check_if_in_correct_page(self, desired_link):
+            self.logger.debug("Trying script")
             self.browser.execute_script("arguments[0].click();", element)
-        sleep(1)
+        sleep(2)
         if not check_if_in_correct_page(self, desired_link):
-            self.logger.warning("Failed to press element, navigating to desired link")
-            web_address_navigator(self, desired_link)
+            self.logger.debug("Failed to press element{}".format(
+                ", navigating to desired link" if not disable_navigation else ""))
+            if not disable_navigation:
+                web_address_navigator(self, desired_link)
     except StaleElementReferenceException:
         pass
 
@@ -185,6 +193,9 @@ def nf_find_and_press_back(
         try_n: int = 1
 ):
     """Finds and press back button"""
+    self.logger.debug("Find and Press Back to link: {}".format(link))
+    if check_if_in_correct_page(self, link):
+        return
     possibles = [
         '/html/body/div[1]/section/nav[1]/div/header//a[@class=" Iazdo"]',
         '/html/body/div[1]/section/nav[1]/div/header//a[@class="Iazdo"]',
@@ -209,7 +220,7 @@ def nf_find_and_press_back(
         self.logger.warning("Failed to get back button with all xpaths")
     else:
         nf_scroll_into_view(self, back)
-        nf_click_center_of_element(self, back, link)
+        nf_click_center_of_element(self, back, link, disable_navigation=True)
         self.quota_supervisor.add_server_call()
         bad_loading = self.browser.find_elements_by_xpath(
             '/html/body/div[1]/section[@class="_9eogI E3X2T"]/span[@class="BHkOG PID-B"]'
@@ -227,6 +238,7 @@ def nf_go_from_post_to_profile(
         self,
         username: str
 ):
+    self.logger.debug("go_from_post_to_profile username: {}".format(username))
     user_link = "https://www.instagram.com/{}/".format(username)
     try:
         username_button = self.browser.find_element_by_xpath(
@@ -236,7 +248,7 @@ def nf_go_from_post_to_profile(
         nf_click_center_of_element(self, username_button, user_link)
         self.quota_supervisor.add_server_call()
     except NoSuchElementException:
-        self.logger.warning("Failed to get user page button, navigating there")
+        self.logger.debug("Failed to get user page button, navigating there")
         web_address_navigator(self, user_link)
 
 

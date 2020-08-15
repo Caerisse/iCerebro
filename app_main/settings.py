@@ -84,24 +84,34 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{name} {bot_username} {levelname} {asctime} {module} {process:d} {processName} {thread:d} {message}',
+            'format': '{name} {levelname} {bot_username} {asctime} {module} {process:d} {processName} {thread:d} {message}',
             'style': '{',
         },
         'simple': {
-            'format': '{name} {bot_username} {levelname} {message}',
+            'format': '{levelname} {message}',
             'style': '{',
         },
     },
     'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
         'db_log': {
             'level': 'DEBUG',
-            'class': 'app_db_logger.db_log_handler.DatabaseLogHandler'
+            'class': 'app_db_logger.db_log_handler.DatabaseLogHandler',
+            'formatter': 'simple',
         },
     },
     'loggers': {
+        'console': {
+            'level': 'DEBUG',
+            'handlers': ['console'],
+        },
         'db': {
-            'handlers': ['db_log'],
-            'level': 'DEBUG'
+            'level': 'DEBUG',
+            'handlers': ['db_log', 'console'],
         }
     },
 }
