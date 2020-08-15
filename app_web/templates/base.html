@@ -53,13 +53,13 @@
                     Home
                 </a>
             </li>
+            {% if user.is_authenticated %}
             <li>
                 <a href="/accounts/subscriptions/">
                     <span class="glyphicon glyphicon-shopping-cart"></span>
                     Subscriptions
                 </a>
             </li>
-            {% if user.is_authenticated %}
             <li>
                 <a href="/accounts/profile/">
                     <span class="glyphicon glyphicon-user"></span>
@@ -70,6 +70,13 @@
                 <a href="/bots/">
                     <span class="glyphicon glyphicon-console"></span>
                     Bots
+                </a>
+            </li>
+            {% else %}
+            <li>
+                <a href="/subscriptions/">
+                    <span class="glyphicon glyphicon-shopping-cart"></span>
+                    Subscriptions
                 </a>
             </li>
             {% endif %}

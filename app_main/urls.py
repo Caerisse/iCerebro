@@ -9,6 +9,8 @@ urlpatterns = [
     path("", app_web.views.index, name="index"),
     path("admin/", admin.site.urls),
     path('accounts/', include('django.contrib.auth.urls')),
+    path("subscriptions/",
+         app_web.views.subscriptions, name="subscriptions"),
     path("accounts/register/",
          app_web.views.register, name="register"),
     path("accounts/profile/",

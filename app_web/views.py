@@ -13,6 +13,10 @@ def index(request):
     return render(request, "index.html")
 
 
+def subscriptions(request):
+    return render(request, 'subscriptions.html')
+
+
 def register(request):
     form_args = {}
     if request.method == "POST":
@@ -45,11 +49,15 @@ def user_settings(request):
     return render(request, 'user_settings.html', {'user': user})
 
 
+@login_required
 def user_subscriptions(request):
     try:
         user = ICerebroUser.objects.get(user=request.user)
         return render(request, 'user_subscriptions.html', {'user': user})
     except ObjectDoesNotExist:
+        raise Http404("User does not exist")
+
+
         return render(request, 'subscriptions.html')
 
 
