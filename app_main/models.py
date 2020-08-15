@@ -169,23 +169,23 @@ class BotSettings(models.Model):
 
     icerebrouser = models.ForeignKey(ICerebroUser, on_delete=models.CASCADE, related_name='bot_settings', null=True)
     instauser = models.ForeignKey(InstaUser, on_delete=models.CASCADE, related_name='bot_settings', null=True)
-    name = models.TextField(blank=False)
+    name = models.CharField(max_length=100, blank=False)
     # TODO: encrypt
-    password = models.TextField(blank=False)
+    password = models.CharField(max_length=50, blank=False)
 
     running = models.BooleanField(default=False)
 
     page_delay = models.IntegerField(default=5, validators=[MinValueValidator(0)])
 
     use_proxy = models.BooleanField(default=False)
-    proxy_address = models.TextField(blank=True)
-    proxy_port = models.TextField(blank=True)
+    proxy_address = models.CharField(max_length=20, blank=True)
+    proxy_port = models.TextField(max_length=5, blank=True)
 
     disable_image_load = models.BooleanField(default=True)
     want_check_browser = models.BooleanField(default=False)
 
     CHOICES_BYPASS = (('EMAIL', 'Email'), ('SMS', 'SMS'))
-    bypass_security_challenge_using = models.IntegerField(choices=CHOICES_BYPASS, default=1)
+    bypass_security_challenge_using = models.CharField(choices=CHOICES_BYPASS, default="EMAIL", max_length=5)
 
     dont_include = ArrayField(models.TextField(blank=True), blank=True, null=True)
     blacklist_campaign = models.TextField(blank=True)
@@ -340,7 +340,7 @@ class BotSettings(models.Model):
     CHOICES_LANGUAGE = (
         ("LATIN", "Latin"),
         ("GREEK", "Greek"),
-        ("CYRILLIC", "CYRILLIC"),
+        ("CYRILLIC", "Cyrillic"),
         ("ARABIC", "Arabic"),
         ("HEBREW", "Hebrew"),
         ("CJK", "CJK"),
@@ -414,6 +414,9 @@ class BotSettings(models.Model):
     qs_random_range_to = models.FloatField(
         validators=[MinValueValidator(1), MaxValueValidator(5)],
         default=1.25, blank=True, null=True)
+
+    def __str__(self):
+        return "Bot Settings for account {}, settings name: {}".format(self.instauser.username, self.name)
 
     class Meta:
         unique_together = ('instauser', 'name')
