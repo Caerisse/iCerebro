@@ -4,7 +4,6 @@ from time import sleep
 from typing import List, Dict
 
 from django.core.exceptions import ObjectDoesNotExist
-from progressbar import progressbar
 import regex
 import emoji
 from emoji.unicode_codes import UNICODE_EMOJI
