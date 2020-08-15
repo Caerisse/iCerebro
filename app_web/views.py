@@ -37,7 +37,7 @@ def user_profile(request):
         user = ICerebroUser.objects.get(user=request.user)
     except ObjectDoesNotExist:
         raise Http404("User does not exist")
-    return render(request, 'user_profile.html', {'user': user})
+    return render(request, 'user_profile.html', {'ice_user': user})
 
 
 @login_required
@@ -46,20 +46,17 @@ def user_settings(request):
         user = ICerebroUser.objects.get(user=request.user)
     except ObjectDoesNotExist:
         raise Http404("User does not exist")
-    return render(request, 'user_settings.html', {'user': user})
+    return render(request, 'user_settings.html', {'ice_user': user})
 
 
 @login_required
 def user_subscriptions(request):
     try:
         user = ICerebroUser.objects.get(user=request.user)
-        return render(request, 'user_subscriptions.html', {'user': user})
+        return render(request, 'user_subscriptions.html', {'ice_user': user})
     except ObjectDoesNotExist:
         raise Http404("User does not exist")
-
-
-        return render(request, 'subscriptions.html')
-
+    
 
 @login_required
 def bots(request):
