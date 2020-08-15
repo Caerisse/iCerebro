@@ -82,7 +82,7 @@ class ICerebro:
         self.aborting = True
 
     def run(self):
-        # return
+        return
         # self.display = Display(visible=0, size=(800, 600))
         # self.display.start()
         self.browser = set_selenium_local_session(self)
