@@ -11,7 +11,6 @@ from app_main.models import BotSettings, BotFollowed
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
 from iCerebro.browser import set_selenium_local_session
-from iCerebro.image_analisis import ImageAnalysis
 from iCerebro.navigation import nf_go_to_tag_page, check_if_in_correct_page, nf_go_from_post_to_profile, \
     nf_go_to_user_page, go_to_feed, nf_go_to_follow_page, nf_find_and_press_back, nf_scroll_into_view, \
     nf_click_center_of_element, go_to_bot_user_page
@@ -62,11 +61,11 @@ class ICerebro:
 
         self.aborting = False
 
-        if self.settings.use_image_analysis:
-            self.ImgAn = ImageAnalysis()
-            #    self.settings.classification_model_name, self.settings.detection_model_name)
-        else:
-            self.ImgAn = None
+        # if self.settings.use_image_analysis:
+        #     self.ImgAn = ImageAnalysis()
+        #        self.settings.classification_model_name, self.settings.detection_model_name)
+        # else:
+        self.ImgAn = None
 
     def start(self):
         self.logger.info("iCerebro Started")
