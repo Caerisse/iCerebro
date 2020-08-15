@@ -416,7 +416,9 @@ class BotSettings(models.Model):
         default=1.25, blank=True, null=True)
 
     def __str__(self):
-        return "Bot Settings for account {}, settings name: {}".format(self.instauser.username, self.name)
+        return "Bot Settings for account {}, settings name: {}".format(
+            self.instauser.username if self.instauser is not None else None,
+            self.name)
 
     class Meta:
         unique_together = ('instauser', 'name')
