@@ -56,7 +56,7 @@ def user_subscriptions(request):
         return render(request, 'user_subscriptions.html', {'ice_user': user})
     except ObjectDoesNotExist:
         raise Http404("User does not exist")
-    
+
 
 @login_required
 def bots(request):

@@ -23,6 +23,7 @@ from iCerebro.navigation import nf_click_center_of_element, get_current_url, \
     nf_go_from_post_to_profile, nf_find_and_press_back, go_to_bot_user_page, nf_go_to_user_page, nf_scroll_into_view, \
     check_if_in_correct_page
 from iCerebro.util_db import store_user, is_in_blacklist
+from app_main.models import BotSettings
 
 default_profile_pic_instagram = [
     "https://instagram.flas1-2.fna.fbcdn.net/vp"
@@ -964,6 +965,7 @@ def check_character_set(self, unistr):
         return self
     if not self.settings.mandatory_character:
         return True
+    print('self.settings.mandatory_character = {}'.format(self.settings.mandatory_character))
     self.check_letters = {}
     return all(
         is_mandatory_character(self, uchr) for uchr in unistr if uchr.isalpha()

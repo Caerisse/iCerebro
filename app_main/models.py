@@ -184,7 +184,7 @@ class BotSettings(models.Model):
     disable_image_load = models.BooleanField(default=True)
     want_check_browser = models.BooleanField(default=False)
 
-    CHOICES_BYPASS = ((1, 'EMAIL'), (2, 'SMS'))
+    CHOICES_BYPASS = (('EMAIL', 'Email'), ('SMS', 'SMS'))
     bypass_security_challenge_using = models.IntegerField(choices=CHOICES_BYPASS, default=1)
 
     dont_include = ArrayField(models.TextField(blank=True), blank=True, null=True)
@@ -241,7 +241,7 @@ class BotSettings(models.Model):
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)])
     user_interact_amount = models.IntegerField(default=3, validators=[MinValueValidator(0)])
-    CHOICES_MEDIA = ((1, 'PHOTO'), (2, 'CAROUSEL'), (3, 'VIDEO'))
+    CHOICES_MEDIA = (('PHOTO', 'Photos'), ('CAROUSEL', 'Carousel'), ('VIDEO', 'Videos'))
     user_interact_media = MultiSelectField(choices=CHOICES_MEDIA, blank=True, null=True,
                                            default='1,2,3')
     user_interact_random = models.BooleanField(default=False)
@@ -265,54 +265,57 @@ class BotSettings(models.Model):
     min_posts = models.IntegerField(validators=[MinValueValidator(0)], blank=True, null=True)
 
     CHOICES_BUSINESS = (
-        (1, "Advertising Agency"),
-        (2, "Advertising/Marketing"),
-        (3, "Art"),
-        (4, "Art Gallery"),
-        (5, "Art Museum"),
-        (6, "Artist"),
-        (7, "Arts & Entertainment"),
-        (8, "Arts & Humanities Website"),
-        (9, "Athlete"),
-        (10, "Auto Dealers"),
-        (11, "Business & Utility Services"),
-        (12, "Clothing Store"),
-        (13, "Community"),
-        (14, "Community Organization"),
-        (15, "Company"),
-        (16, "Consulting Agency"),
-        (17, "Content & Apps"),
-        (18, "Creators & Celebrities"),
-        (19, "Education"),
-        (20, "Food & Personal Goods"),
-        (21, "General Interest"),
-        (22, "Graphic Designer"),
-        (23, "Home Goods Stores"),
-        (24, "Home Services"),
-        (25, "Jewelry/Watches"),
-        (26, "Lifestyle Services"),
-        (27, "Local Business"),
-        (28, "Local Events"),
-        (29, "Management Service"),
-        (30, "Media/News Company"),
-        (31, "Non-Profits & Religious Organizations"),
-        (32, "Party Entertainment Service"),
-        (33, "Personal Goods & General Merchandise Stores"),
-        (34, "Photographer"),
-        (35, "Photography Videography"),
-        (36, "Product/Service"),
-        (37, "Professional Service"),
-        (38, "Professional Sports Team"),
-        (39, "Public Figure"),
-        (40, "Public Relations Agency"),
-        (41, "Publishers"),
-        (42, "Restaurants"),
-        (43, "Ski Resort"),
-        (44, "Sport"),
-        (45, "Sports & Recreation"),
-        (46, "Transportation & Accomodation Services"),
-        (47, "Travel Agency"),
-        (48, "Wine/Spirits"),
+        ('Advertising Agency', 'Advertising Agency'),
+        ('Advertising/Marketing', 'Advertising/Marketing'),
+        ('Art', 'Art'),
+        ('Art Gallery', 'Art Gallery'),
+        ('Art Museum', 'Art Museum'),
+        ('Artist', 'Artist'),
+        ('Arts & Entertainment', 'Arts & Entertainment'),
+        ('Arts & Humanities Website', 'Arts & Humanities Website'),
+        ('Athlete', 'Athlete'),
+        ('Auto Dealers', 'Auto Dealers'),
+        ('Business & Utility Services', 'Business & Utility Services'),
+        ('Clothing Store', 'Clothing Store'),
+        ('Community', 'Community'),
+        ('Community Organization', 'Community Organization'),
+        ('Company', 'Company'),
+        ('Consulting Agency', 'Consulting Agency'),
+        ('Content & Apps', 'Content & Apps'),
+        ('Creators & Celebrities', 'Creators & Celebrities'),
+        ('Education', 'Education'),
+        ('Food & Personal Goods', 'Food & Personal Goods'),
+        ('General Interest', 'General Interest'),
+        ('Graphic Designer', 'Graphic Designer'),
+        ('Home Goods Stores', 'Home Goods Stores'),
+        ('Home Services', 'Home Services'),
+        ('Jewelry/Watches', 'Jewelry/Watches'),
+        ('Lifestyle Services', 'Lifestyle Services'),
+        ('Local Business', 'Local Business'),
+        ('Local Events', 'Local Events'),
+        ('Management Service', 'Management Service'),
+        ('Media/News Company', 'Media/News Company'),
+        ('Non-Profits & Religious Organizations',
+         'Non-Profits & Religious Organizations'),
+        ('Party Entertainment Service', 'Party Entertainment Service'),
+        ('Personal Goods & General Merchandise Stores',
+         'Personal Goods & General Merchandise Stores'),
+        ('Photographer', 'Photographer'),
+        ('Photography Videography', 'Photography Videography'),
+        ('Product/Service', 'Product/Service'),
+        ('Professional Service', 'Professional Service'),
+        ('Professional Sports Team', 'Professional Sports Team'),
+        ('Public Figure', 'Public Figure'),
+        ('Public Relations Agency', 'Public Relations Agency'),
+        ('Publishers', 'Publishers'),
+        ('Restaurants', 'Restaurants'),
+        ('Ski Resort', 'Ski Resort'),
+        ('Sport', 'Sport'),
+        ('Sports & Recreation', 'Sports & Recreation'),
+        ('Transportation & Accomodation Services',
+         'Transportation & Accomodation Services'),
+        ('Travel Agency', 'Travel Agency'),
+        ('Wine/Spirits', 'Wine/Spirits')
     )
 
     skip_business = models.BooleanField(default=False)
@@ -335,17 +338,17 @@ class BotSettings(models.Model):
     # relationship_data = {username: {"all_following": [], "all_followers": []}}
     # simulation = {"enabled": True, "percentage": 100}
     CHOICES_LANGUAGE = (
-        (1, "LATIN"),
-        (2, "GREEK"),
-        (3, "CYRILLIC"),
-        (4, "ARABIC"),
-        (5, "HEBREW"),
-        (6, "CJK"),
-        (7, "HANGUL"),
-        (8, "HIRAGANA"),
-        (9, "KATAKANA"),
-        (10, "THAI"),
-        (11, "MATHEMATICAL")
+        ("LATIN", "Latin"),
+        ("GREEK", "Greek"),
+        ("CYRILLIC", "CYRILLIC"),
+        ("ARABIC", "Arabic"),
+        ("HEBREW", "Hebrew"),
+        ("CJK", "CJK"),
+        ("HANGUL", "Hangul"),
+        ("HIRAGANA", "Hiragana"),
+        ("KATAKANA", "Katakana"),
+        ("THAI", "Thai"),
+        ("MATHEMATICAL", "Mathematical")
     )
     mandatory_language = models.BooleanField(default=False)
     mandatory_character = MultiSelectField(choices=CHOICES_LANGUAGE, blank=True, null=True)
@@ -369,11 +372,11 @@ class BotSettings(models.Model):
         default=1.25)
 
     CHOICES_SLEEP = (
-        (1, "like"),
-        (2, "comment"),
-        (3, "follow"),
-        (4, "unfollow"),
-        (5, "server_call")
+        ('like', 'like'),
+        ('comment', 'comment'),
+        ('follow', 'follow'),
+        ('unfollow', 'unfollow'),
+        ('server_call', 'server_call')
     )
     quota_supervisor_enabled = models.BooleanField(default=True),
     qs_sleep_after = MultiSelectField(choices=CHOICES_SLEEP, blank=True, null=True)

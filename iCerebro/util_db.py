@@ -43,24 +43,20 @@ def store_post(
         classified_as: str = None
 ) -> Post:
     user, _ = InstaUser.objects.get_or_create(username=username_text)
-    post = None
-    try:
-        post, created = Post.objects.update_or_create(
-            link=post_link,
-            defaults={
-                'instauser': user,
-                'date_posted': post_date,
-                'src': image_links,
-                'caption': caption.encode("utf-8"),
-                'likes': likes_count,
-                'ig_desciption': image_descriptions,
-                'objects_detected': objects_detected,
-                'classified_as': classified_as
-            }
-        )
-    except Exception as e:
-        print(e)
-    #post.save()
+    likes_count = likes_count if likes_count else 0
+    post, created = Post.objects.update_or_create(
+        link=post_link,
+        defaults={
+            'instauser': user,
+            'date_posted': post_date,
+            'src': image_links,
+            'caption': caption.encode("utf-8"),
+            'likes': likes_count,
+            'ig_desciption': image_descriptions,
+            'objects_detected': objects_detected,
+            'classified_as': classified_as
+        }
+    )
     return post
 
 

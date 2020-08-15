@@ -34,9 +34,7 @@ def like_loop(
     already_interacted_links = []
     interactions = Interactions()
     try:
-        print(interactions.liked_img)
         while interactions.liked_img in range(0, amount):
-            print(interactions.liked_img)
             if self.jumps.check_likes():
                 self.logger.warning(
                     "Like quotient reached its peak, leaving Like By {} activity".format(what)
@@ -85,9 +83,7 @@ def like_loop(
                         amount,
                         users_validated
                     )
-                    print(interactions.liked_img)
                     interactions += post_interactions
-                    print(interactions.liked_img)
                     sleep(1)
                     nf_find_and_press_back(self, base_link)
                     already_interacted_links.append(link)
@@ -105,8 +101,8 @@ def like_loop(
                     sc_rolled += 1
                     sleep(scroll_nap)
 
-    except Exception:
-        raise
+    except Exception as err:
+        self.logger.error("Unexpected Exception: {}".format(err))
     finally:
         return interactions
 
@@ -240,6 +236,9 @@ def interact_with_post(
     except NoSuchElementException as err:
         self.logger.error("Invalid Page: {}".format(err))
         return "Invalid Page", interactions
+    except Exception as err:
+        self.logger.error("Unexpected Exception: {}".format(err))
+        return "Unexpected Exception", interactions
 
 
 def get_media_edge_comment_string(media):
@@ -297,7 +296,7 @@ def check_post(
 
         caption = self.browser.find_element_by_xpath(XP.POST_CAPTION).text
         caption = "" if caption is None else caption
-        caption, _ = deform_emojis(caption)
+        caption, emoji_less_caption = deform_emojis(caption)
 
         for image in images:
             image_description = image.get_attribute('alt')
@@ -431,7 +430,6 @@ def check_post(
                           caption, likes_count, image_descriptions)
         self.logger.info("Storing Comments")
         store_comments(self, post)
-        self.logger.info("Checking elapsed time")
         elapsed_time = perf_counter() - t
         self.logger.info("Check post elapsed time: {:.0f} seconds".format(elapsed_time))
 
