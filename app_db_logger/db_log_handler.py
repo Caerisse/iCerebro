@@ -14,9 +14,14 @@ class DatabaseLogHandler(logging.Handler):
 
         msg = self.format(record)
 
+        try:
+            bot_username = record.bot_username
+        except AttributeError:
+            bot_username = 'no_username_provided'
+
         kwargs = {
             'logger_name': record.name,
-            'bot_username': record.bot_username or "",
+            'bot_username': bot_username,
             'level': record.levelno,
             'msg': msg,
             'trace': trace

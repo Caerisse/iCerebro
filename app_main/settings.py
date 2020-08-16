@@ -1,6 +1,9 @@
+import logging
 import os
 import django_heroku
 import dj_database_url
+from django.utils.log import DEFAULT_LOGGING
+from django.utils.log import configure_logging
 
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -82,39 +85,78 @@ DATABASES = {
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+    },
     'formatters': {
+        'django.server': DEFAULT_LOGGING['formatters']['django.server'],
         'verbose': {
-            'format': '{name} {levelname} {bot_username} {asctime} {module} {process:d} {processName} {thread:d} {message}',
-            'style': '{',
+            'format': '[%(asctime)s] %(levelname)s [%(pathname)s.%(funcName)s:%(lineno)d] %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
         },
         'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
+            'format': '%(message)s',
         },
     },
     'handlers': {
+        'django.server': DEFAULT_LOGGING['handlers']['django.server'],
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+        # 'production_logfile': {
+        #     'level': 'ERROR',
+        #     'filters': ['require_debug_false'],
+        #     'class': 'logging.handlers.RotatingFileHandler',
+        #     'filename': '/var/log/django/django_production.log',
+        #     'maxBytes' : 1024*1024*100, # 100MB
+        #     'backupCount' : 5,
+        #     'formatter': 'simple'
+        # },
+        'mail_admins': {
+            'level': 'ERROR',
+            'filters': ['require_debug_false'],
+            'class': 'django.utils.log.AdminEmailHandler',
+            'formatter': 'verbose',
+        },
         'db_log': {
-            'level': 'DEBUG',
+            'level': 'INFO',
+            # 'filters': ['require_debug_false'],
             'class': 'app_db_logger.db_log_handler.DatabaseLogHandler',
             'formatter': 'simple',
         },
     },
+    'root': {
+        'level': 'DEBUG',
+        'handlers': ['console'],
+    },
     'loggers': {
         'console': {
             'level': 'DEBUG',
+            'handlers': ['console']
+        },
+        'django.server': DEFAULT_LOGGING['loggers']['django.server'],
+        'django.security': {
+            'handlers': ['mail_admins'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'py.warnings': {
             'handlers': ['console'],
         },
         'db': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'handlers': ['db_log', 'console'],
+            'propagate': False
         }
     },
 }
+
+LOGGING_CONFIG = 'logging.config.dictConfig'
+configure_logging(LOGGING_CONFIG, LOGGING)
 
 # Password validation
 # https://docs.djangoproject.com/en/2.0/ref/settings/#auth-password-validators

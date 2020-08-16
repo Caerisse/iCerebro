@@ -40,7 +40,7 @@ class ICerebro:
         self.username = self.settings.instauser.username
 
         # TODO: replace logger with custom class to always add the extra parameter
-        self.logger = IceLogger(self.username)
+        self.logger = IceLogger(username=self.username)
 
         self.followed_by = 0
         self.following_num = 0
