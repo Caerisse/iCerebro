@@ -62,7 +62,7 @@ def set_selenium_local_session(
 
     #if self.settings.headless_browser:
     # TODO: remove comment before commiting to server
-    #firefox_options.add_argument("-headless")
+    firefox_options.add_argument("-headless")
 
     firefox_profile = webdriver.FirefoxProfile()
 
