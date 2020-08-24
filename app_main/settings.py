@@ -137,10 +137,10 @@ LOGGING = {
             'formatter': 'msg',
         },
     },
-    # 'root': {
-    #     'level': 'DEBUG',
-    #     'handlers': ['console'],
-    # },
+    'root': {
+        'level': 'DEBUG',
+        'handlers': ['console'],
+    },
     'loggers': {
         'django.server': DEFAULT_LOGGING['loggers']['django.server'],
         'django.security': {
