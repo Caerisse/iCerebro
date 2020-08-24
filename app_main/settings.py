@@ -1,4 +1,3 @@
-import logging
 import os
 import django_heroku
 import dj_database_url
@@ -19,7 +18,7 @@ SECRET_KEY = "CHANGE_ME!!!! (P.S. the SECRET_KEY environment variable will be us
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 # Forms template
 CRISPY_TEMPLATE_PACK = "bootstrap4"
@@ -97,6 +96,10 @@ LOGGING = {
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
         'simple': {
+            'format': '[%(asctime)s] %(levelname)s [%(name)s] %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        },
+        'msg': {
             'format': '%(message)s',
         },
     },
@@ -106,6 +109,11 @@ LOGGING = {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
+        },
+        'console_simple': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
         },
         # 'production_logfile': {
         #     'level': 'ERROR',
@@ -126,18 +134,14 @@ LOGGING = {
             'level': 'INFO',
             # 'filters': ['require_debug_false'],
             'class': 'app_db_logger.db_log_handler.DatabaseLogHandler',
-            'formatter': 'simple',
+            'formatter': 'msg',
         },
     },
-    'root': {
-        'level': 'DEBUG',
-        'handlers': ['console'],
-    },
+    # 'root': {
+    #     'level': 'DEBUG',
+    #     'handlers': ['console'],
+    # },
     'loggers': {
-        'console': {
-            'level': 'DEBUG',
-            'handlers': ['console']
-        },
         'django.server': DEFAULT_LOGGING['loggers']['django.server'],
         'django.security': {
             'handlers': ['mail_admins'],
@@ -146,6 +150,10 @@ LOGGING = {
         },
         'py.warnings': {
             'handlers': ['console'],
+        },
+        'decorator': {
+            'level': 'DEBUG',
+            'handlers': ['console_simple']
         },
         'db': {
             'level': 'INFO',

@@ -10,21 +10,21 @@ from selenium.common.exceptions import WebDriverException, NoSuchElementExceptio
 from app_main.models import BotSettings, BotFollowed
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-from iCerebro.browser import set_selenium_local_session
+from iCerebro.browser import set_selenium_local_session, close_browser
 from iCerebro.navigation import nf_go_to_tag_page, check_if_in_correct_page, nf_go_from_post_to_profile, \
-    nf_go_to_user_page, go_to_feed, nf_go_to_follow_page, nf_find_and_press_back, nf_scroll_into_view, \
+    nf_go_to_user_page, nf_go_to_home, nf_go_to_follow_page, nf_find_and_press_back, nf_scroll_into_view, \
     nf_click_center_of_element, go_to_bot_user_page
 from iCerebro.quota_supervisor import QuotaSupervisor
 from iCerebro.upload import upload_single_image
 from iCerebro.util import Interactions, get_active_users, format_number, nf_validate_user_call, \
-    nf_get_all_users_on_element
+    nf_get_all_users_on_element, interruption_handler
 
 from iCerebro.util import Jumps
 from iCerebro.util_db import is_follow_restricted
 from iCerebro.util_follow import follow_user, get_followers, unfollow_loop
 from iCerebro.util_like import like_loop
 from iCerebro.util_login import login_user
-from iCerebro.IceLogger import IceLogger
+from iCerebro.util_loggers import IceLogger
 
 
 class ICerebro:
@@ -34,6 +34,7 @@ class ICerebro:
             settings: BotSettings
     ):
         self.thread = None
+        self.update_thread = None
         self.start_time = time()
         self.settings = settings
         self.instauser = self.settings.instauser
@@ -69,28 +70,46 @@ class ICerebro:
 
     def start(self):
         self.logger.info("iCerebro Started")
+        self.settings.abort = False
         self.settings.running = True
         self.settings.save()
+        
         self.thread = threading.Thread(target=self.run, args=())
         self.thread.daemon = True
         self.thread.start()
-
-    def stop(self):
-        self.logger.info("iCerebro will stop soon")
-        self.settings.running = False
-        self.settings.save()
-        self.aborting = True
+        
+        self.update_thread = threading.Thread(target=self.update_settings, args=())
+        self.update_thread.daemon = True
+        self.update_thread.start()
+        
+    def update_settings(self):
+        while not self.aborting:
+            # Think whats a good amount of time beetween refresh
+            sleep(60)
+            self.settings.refresh_from_db()
+            if self.settings.abort:
+                self.logger.info("iCerebro will stop soon")
+                self.aborting = True
 
     def run(self):
-        return
-        # self.display = Display(visible=0, size=(800, 600))
-        # self.display.start()
-        self.browser = set_selenium_local_session(self)
-        self.login()
-        self.like_by_tags(random.sample(self.settings.hashtags, 3), 2)
-        # while self.settings.running:
-        #     # TODO, add settings about what to do while running
-        #     self.like_by_feed(10)
+        try:
+            self.display = Display(visible=0, size=(800, 600))
+            self.display.start()
+            self.browser = set_selenium_local_session(self)
+            self.login()
+            # self.like_by_tags(random.sample(self.settings.hashtags, 3), 5)
+            self.like_by_feed(10)
+            # while not self.aborting:
+            #     # TODO, add settings about what to do while running
+            #     self.like_by_feed(10)
+        finally:
+            close_browser(self.browser, True, self.logger)
+            with interruption_handler(threaded=True):
+                self.display.stop()
+            self.logger.info("iCerebro stopped")
+            self.settings.abort = False
+            self.settings.running = False
+            self.settings.save()
 
     def login(self):
         """Used to login the user with username and password"""
@@ -243,7 +262,7 @@ class ICerebro:
             return self
 
         self.logger.info("Like by Feed - started")
-        go_to_feed(self)
+        nf_go_to_home(self)
         interactions = like_loop(self, "Feed", "https://www.instagram.com/", amount, True)
         self.logger.info("Like by Feed - ended")
         self.logger.info(str(interactions))

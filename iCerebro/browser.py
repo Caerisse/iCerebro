@@ -105,7 +105,7 @@ def set_selenium_local_session(
     # set mobile viewport (iPhone X)
     browser.set_window_size(375, 812)
 
-    self.logger.info("Selenium session started")
+    self.logger.debug("Selenium session started")
 
     return browser
 

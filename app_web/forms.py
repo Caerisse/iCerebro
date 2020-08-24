@@ -18,7 +18,7 @@ class BotSettingsForm(forms.ModelForm):
     class Meta:
         model = BotSettings
         fields = '__all__'
-        exclude = ['icerebrouser', 'running', 'instauser']
+        exclude = ['icerebrouser', 'abort', 'running', 'instauser']
 
 
 class BotRunForm(forms.Form):

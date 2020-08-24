@@ -1,3 +1,4 @@
+import functools
 import logging
 import warnings
 import os
@@ -101,3 +102,21 @@ class IceLogger(object):
             rv = (co.co_filename, f.f_lineno, co.co_name)
             break
         return rv
+
+
+class LogDecorator(object):
+    def __init__(self):
+        self.logger = logging.getLogger('decorator')
+
+    def __call__(self, fn):
+        @functools.wraps(fn)
+        def decorated(*args, **kwargs):
+            try:
+                self.logger.debug("{0} - {1} - {2}".format(fn.__name__, args, kwargs))
+                result = fn(*args, **kwargs)
+                self.logger.debug("{0} - return: {1}".format(fn.__name__, result))
+                return result
+            except Exception as ex:
+                self.logger.debug("{0} - Exception: {1}".format(fn.__name__, ex))
+                raise ex
+        return decorated

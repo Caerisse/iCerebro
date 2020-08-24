@@ -108,7 +108,8 @@ def add_follow_times(
         self,
         username: str
 ):
-    bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=username)
+    user, _ = InstaUser.objects.get_or_create(username=username)
+    bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=user)
     bot_followed.times += 1
     bot_followed.save()
 
@@ -117,7 +118,8 @@ def is_follow_restricted(
         self,
         username: str
 ) -> bool:  # Followed username more than or equal than self.follow_times
-    bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=username)
+    user, _ = InstaUser.objects.get_or_create(username=username)
+    bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=user)
     return bot_followed.times >= self.settings.follow_times
 
 

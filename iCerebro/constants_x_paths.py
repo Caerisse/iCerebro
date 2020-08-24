@@ -92,8 +92,8 @@ IS_PRIVATE_PROFILE = "//*[contains(text(), 'This Account is Private')]"
 SPAN_LIKE_ELEMENTS = "//span[@aria-label='Like']"
 COMMENT_LIKE_BUTTON = ".."
 # like_image
-LIKE = "//section/span/button[*[local-name()='svg']/@aria-label='Like']"
-UNLIKE = "//section/span/button[*[local-name()='svg']/@aria-label='Unlike']"
+LIKE = "//section/span/button/div/span[*[local-name()='svg']/@aria-label='Like']"
+UNLIKE = "//section/span/button/div/span[*[local-name()='svg']/@aria-label='Unlike']"
 # like_from_image
 MAIN_ARTICLE = "//main//article//div//div[1]//div[1]//a[1]"
 # login_user
@@ -125,7 +125,7 @@ NEXT_STORY = "/html/body/span/section/div/div/section/div[2]/button[2]"
 LIKED_COUNTER_BUTTON = "//div/article/div[2]/section[2]/div/div/a"
 SECOND_COUNTER_BUTTON = "//div/article/div[2]/section[2]/div/div/button"
 # utils
-POSTS_ON_ELEMENT = '//a[starts-with(@href, "/p/") and not(contains(@href,"liked_by"))]'
+POSTS_ON_ELEMENT = '//a[starts-with(@href, "/p/") and not(contains(@href,"liked_by")) and not(contains(@href,"comments"))]'
 USERS_ON_ELEMENT = '//a[@class="FPmhX notranslate  _0imsa "]'
 # check_post
 POST_USERNAME = '/html/body/div[1]/section/main/div/div/article/header//div[@class="e1e1d"]'
@@ -136,3 +136,4 @@ POST_VIDEO_PREVIEWS = '/html/body/div[1]/section/main/div/div/article//img[@clas
 POST_VIDEOS = '/html/body/div[1]/section/main/div/div/article//video[@class="tWeCl"]'
 POST_CAPTION = "/html/body/div[1]/section/main/div/div/article//div/div/span/span"
 POST_DATE = '/html/body/div[1]/section/main/div/div/article//a[@class="c-Yi7"]/time'
+BLOCKED_ERROR = "/html/body/div/div/div/div[contains(@class,'error-container')]" # check for class = 'error-container -cx-PRIVATE-ErrorPage__errorContainer -cx-PRIVATE-ErrorPage__errorContainer__'  or child /html/body/div/div[1]/div/div/h2 text = Error

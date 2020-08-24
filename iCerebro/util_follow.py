@@ -9,16 +9,17 @@ from selenium.common.exceptions import ElementNotVisibleException
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-from iCerebro.navigation import nf_go_to_user_page
+from iCerebro.util_loggers import LogDecorator
+from iCerebro.navigation import nf_go_to_user_page, nf_scroll_into_view, explicit_wait
 from iCerebro.navigation import check_if_in_correct_page
 from iCerebro.navigation import nf_click_center_of_element
 from iCerebro.util import is_page_available
 from iCerebro.util import emergency_exit
-from iCerebro.util import explicit_wait
 from iCerebro.util_db import add_user_to_blacklist
 from iCerebro.util_db import add_follow_times
 
 
+@LogDecorator()
 def unfollow_loop(
         self,
         unfollow_list: list,
@@ -102,6 +103,7 @@ def unfollow_loop(
     return unfollowed
 
 
+@LogDecorator()
 def unfollow(
         self,
         track: str,
@@ -163,6 +165,7 @@ def unfollow(
     return True, "success"
 
 
+@LogDecorator()
 def get_following_status(
         self,
         track: str,
@@ -213,6 +216,7 @@ def get_following_status(
     return following_status, follow_button
 
 
+@LogDecorator()
 def confirm_unfollow(self):
     """ Deal with the confirmation dialog boxes during an unfollow """
     attempt = 0
@@ -232,6 +236,7 @@ def confirm_unfollow(self):
                 sleep(1)
 
 
+@LogDecorator()
 def follow_user(
         self,
         track: str,
@@ -258,6 +263,7 @@ def follow_user(
         for _ in range(3):
             following_status, follow_button = get_following_status(self, track, user_name)
             if following_status in ["Follow", "Follow Back"]:
+                nf_scroll_into_view(self, follow_button)
                 nf_click_center_of_element(self, follow_button)
                 sleep(3)
                 following_status, follow_button = get_following_status(self, track, user_name)
@@ -295,6 +301,7 @@ def follow_user(
     return True, "success"
 
 
+@LogDecorator()
 def get_followers(
         self,
         username: str

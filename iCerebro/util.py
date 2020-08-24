@@ -10,19 +10,16 @@ from platform import system
 from subprocess import call
 from selenium.webdriver.remote.webelement import WebElement
 
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, JavascriptException, StaleElementReferenceException
 from selenium.common.exceptions import WebDriverException
-from selenium.common.exceptions import TimeoutException
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
 import iCerebro.constants_css_selectors as CS
-from iCerebro.navigation import nf_click_center_of_element, get_current_url, \
+from iCerebro.util_loggers import LogDecorator
+from iCerebro.navigation import nf_click_center_of_element, get_current_url, explicit_wait, \
     nf_go_from_post_to_profile, nf_find_and_press_back, go_to_bot_user_page, nf_go_to_user_page, nf_scroll_into_view, \
-    check_if_in_correct_page
+    check_if_in_correct_page, check_for_error, SoftBlockedException
 from iCerebro.util_db import store_user, is_in_blacklist
 
 default_profile_pic_instagram = [
@@ -114,6 +111,7 @@ class Interactions:
         string += "\nAlready Visited: {}".format(self.already_Visited) if self.already_Visited != 0 else ""
         string += "\nStories Watched: {}".format(self.stories_watched) if self.stories_watched != 0 else ""
         string += "\nReels Watched: {}".format(self.reels_watched) if self.reels_watched != 0 else ""
+        string = string if string != "Interactions: " else "No interactions recorded"
         return string
 
 
@@ -137,12 +135,33 @@ class Jumps:
         return self.likes >= 4
 
 
+def sleep_while_blocked(self):
+    while True:
+        delay_random = random.randint(300, 600)
+        self.logger.info(
+            "Bot is soft blocked will sleep for {} minutes and {} seconds and check if it can continue".format(
+                int(delay_random/60),
+                delay_random % 60
+            )
+        )
+        sleep(delay_random)
+        try:
+            self.browser.execute_script(JS.RELOAD)
+            self.quota_supervisor.add_server_call()
+            check_for_error(self)
+            break
+        except SoftBlockedException:
+            pass
+
+
+@LogDecorator()
 def nf_get_all_posts_on_element(
         element: WebElement
 ) -> List[WebElement]:
     return element.find_elements_by_xpath(XP.POSTS_ON_ELEMENT)
 
 
+@LogDecorator()
 def nf_get_all_users_on_element(
         self
 ) -> List[WebElement]:
@@ -150,6 +169,7 @@ def nf_get_all_users_on_element(
     return self.browser.find_elements_by_xpath(XP.USERS_ON_ELEMENT)
 
 
+@LogDecorator()
 def nf_validate_user_call(
         self,
         username: str,
@@ -162,6 +182,7 @@ def nf_validate_user_call(
 
    :returns: valid, reason
    """
+    t = perf_counter()
     followers_count = None
     following_count = None
     number_of_posts = None
@@ -198,12 +219,9 @@ def nf_validate_user_call(
 
     try:
         if post_link:
-            self.logger.debug("Navigating to user page")
             nf_go_from_post_to_profile(self, username)
-        self.logger.debug("Checking user page")
         # Checks the potential of target user by relationship status in order
         # to delimit actions within the desired boundary
-        self.logger.debug("followers/following")
         if (
                 self.settings.potency_ratio
                 or self.settings.delimit_by_numbers
@@ -215,7 +233,6 @@ def nf_validate_user_call(
             reverse_relationship = False
 
             # get followers & following counts
-            self.logger.debug("Getting relationship counts")
             followers_count, following_count = get_relationship_counts(self, username)
 
             potency_ratio = self.settings.potency_ratio if self.settings.potency_ratio else None
@@ -274,11 +291,12 @@ def nf_validate_user_call(
                                 return False, "'{}'s following count is less than " \
                                               "minimum limit".format(username)
 
-        self.logger.debug("number_of_posts")
         if self.settings.min_posts or self.settings.max_posts:
             # if you are interested in relationship number of posts boundaries
             try:
                 number_of_posts = get_number_of_posts(self)
+                if number_of_posts is None:
+                    raise NoSuchElementException
             except NoSuchElementException or WebDriverException:
                 self.logger.error("Couldn't get number of posts")
                 return False, "Couldn't get number of posts"
@@ -300,7 +318,6 @@ def nf_validate_user_call(
 
         # Skip users
         # skip private
-        self.logger.debug("skip_private")
         if self.settings.skip_private:
             try:
                 self.browser.find_element_by_xpath(XP.IS_PRIVATE_PROFILE)
@@ -311,7 +328,6 @@ def nf_validate_user_call(
                 return False, "{} is private account, skipping".format(username)
 
         # skip no profile pic
-        self.logger.debug("skip_no_profile_pic")
         if self.settings.skip_no_profile_pic:
             try:
                 profile_pic = get_user_data(self, JS.PROFILE_PIC)
@@ -326,7 +342,6 @@ def nf_validate_user_call(
                 return False, "{} has default instagram profile picture".format(username)
 
         # skip business
-        self.logger.debug("skip_business")
         if self.settings.skip_business or self.settings.skip_non_business:
             # if is business account skip under conditions
             try:
@@ -355,7 +370,6 @@ def nf_validate_user_call(
                     elif random.randint(0, 100) <= self.settings.skip_business_percentage:
                         return False, "'{}' is business account, skipping".format(username)
 
-        self.logger.debug("skip_bio_keyword")
         if len(self.settings.skip_bio_keyword) != 0:
             # if contain stop words then skip
             try:
@@ -378,13 +392,15 @@ def nf_validate_user_call(
     except NoSuchElementException:
         return False, "Unable to locate element"
     finally:
-        self.logger.debug("store_user")
+        self.loger.debug("Storing User")
         store_user(username, followers_count, following_count, number_of_posts)
         if post_link:
-            self.logger.debug("going back to post")
             nf_find_and_press_back(self, post_link)
+        elapsed_time = perf_counter() - t
+        self.logger.info("Validate user elapsed time: {:.0f} seconds".format(elapsed_time))
 
 
+@LogDecorator()
 def is_private_profile(
         self,
         following=True
@@ -401,8 +417,8 @@ def is_private_profile(
     return is_private
 
 
+@LogDecorator()
 def get_number_of_posts(self):
-    self.logger.debug("get_number_of_posts")
     """Get the number of posts from the profile screen"""
     num_of_posts = None
     try:
@@ -423,30 +439,34 @@ def get_number_of_posts(self):
     return num_of_posts
 
 
+@LogDecorator()
 def get_user_data(
         self,
         query: str,
         base_query_1: str = JS.BASE_QUERY_1,
         base_query_2: str = JS.BASE_QUERY_2,
 ):
-    self.logger.debug("get_user_data")
     try:
-        data = self.browser.execute_script(base_query_1 + query)
-    except WebDriverException:
-        self.browser.execute_script(JS.RELOAD)
-        self.quota_supervisor.add_server_call()
-        data = self.browser.execute_script(base_query_2 + query)
-    return data
+        try:
+            data = self.browser.execute_script(base_query_1 + query)
+        except WebDriverException:
+            self.browser.execute_script(JS.RELOAD)
+            self.quota_supervisor.add_server_call()
+            data = self.browser.execute_script(base_query_2 + query)
+        return data
+    except JavascriptException:
+        check_for_error(self)
+        self.logger.error("JavascriptException in get user data, this shouldn't happen")
 
 
 # TODO: rewrite so it uses less graphql
+@LogDecorator()
 def get_active_users(
         self,
         username: str,
         posts_amount: int,
         boundary: int = None
 ):
-    self.logger.debug("get_active_users")
     """Returns a list with usernames who liked the latest n posts"""
     start_time = time()
     user_link = "https://www.instagram.com/{}/".format(username)
@@ -532,6 +552,7 @@ def get_active_users(
     return active_users
 
 
+@LogDecorator()
 def get_like_count(
         self,
 ) -> int:
@@ -540,7 +561,6 @@ def get_like_count(
     except NoSuchElementException:
         likes_count = None
     if likes_count:
-        self.logger.debug("likes_count: {}".format(likes_count))
         return format_number(likes_count)
     else:
         try:
@@ -549,7 +569,6 @@ def get_like_count(
             try:
                 likes_count = self.browser.find_element_by_css_selector(CS.LIKES_COUNT).text
                 if likes_count:
-                    self.logger.debug("likes_count: {}".format(likes_count))
                     return format_number(likes_count)
                 else:
                     self.logger.info("Failed to check likes count, empty string")
@@ -559,12 +578,12 @@ def get_like_count(
                 return 0
 
 
+@LogDecorator()
 def get_likers(
         self,
         link: str,
         boundary: int = None
 ) -> Tuple[bool, list]:
-    self.logger.debug("get_likers")
     likers_count = get_like_count(self)
     try:
         likes_button = self.browser.find_elements_by_xpath(XP.LIKES_BUTTON)
@@ -669,6 +688,7 @@ def get_likers(
         return False, []
 
 
+@LogDecorator()
 def get_users_from_dialog(old_data: list, dialog: WebElement):
     """
     Prepared to work specially with the dynamic data load in the 'Likes'
@@ -686,6 +706,7 @@ def get_users_from_dialog(old_data: list, dialog: WebElement):
     return new_data
 
 
+@LogDecorator()
 def close_dialog_box(self):
     """ Click on the close button spec. in the 'Likes' dialog box """
     try:
@@ -695,6 +716,7 @@ def close_dialog_box(self):
         pass
 
 
+@LogDecorator()
 def extract_text_from_element(elem: WebElement):
     """ As an element is valid and contains text, extract it and return """
     if elem and hasattr(elem, "text") and elem.text:
@@ -704,6 +726,7 @@ def extract_text_from_element(elem: WebElement):
     return text
 
 
+@LogDecorator()
 def remove_duplicates(container, keep_order, logger):
     """ Remove duplicates from all kinds of data types easily """
     # add support for data types as needed in future
@@ -742,12 +765,14 @@ def format_number(number):
     return int(formatted_num)
 
 
+@LogDecorator()
 def get_relationship_counts(self, username):
     """ Gets the followers & following counts of a given user """
 
     user_link = "https://www.instagram.com/{}/".format(username)
 
     if not check_if_in_correct_page(self, user_link):
+        self.logger.debug("Not in correct page, shouldn't happen if calling from validate_user_call")
         if username == self.username:
             go_to_bot_user_page(self)
         else:
@@ -755,10 +780,11 @@ def get_relationship_counts(self, username):
 
     try:
         followers_count = get_user_data(self, JS.FOLLOWERS_COUNT)
+        self.quota_supervisor.add_server_call()
     except WebDriverException:
         try:
             followers_count = format_number(self.browser.find_element_by_xpath(XP.FOLLOWERS_COUNT).text)
-        except NoSuchElementException:
+        except (NoSuchElementException, StaleElementReferenceException):
             try:
                 self.browser.execute_script(JS.RELOAD)
                 self.quota_supervisor.add_server_call()
@@ -773,7 +799,7 @@ def get_relationship_counts(self, username):
                             "Failed to get followers count of '{}'".format(username.encode("utf-8"))
                         )
                         followers_count = None
-                except NoSuchElementException:
+                except (NoSuchElementException, StaleElementReferenceException):
                     self.logger.error(
                         "Error occurred while getting followers count "
                         "of '{}'".format(username.encode("utf-8"))
@@ -787,7 +813,7 @@ def get_relationship_counts(self, username):
             following_count = format_number(
                 self.browser.find_element_by_xpath(XP.FOLLOWING_COUNT).text
             )
-        except NoSuchElementException:
+        except (NoSuchElementException, StaleElementReferenceException):
             try:
                 self.browser.execute_script(JS.RELOAD)
                 self.quota_supervisor.add_server_call()
@@ -802,7 +828,7 @@ def get_relationship_counts(self, username):
                             "Failed to get following count of '{}'".format(username.encode("utf-8"))
                         )
                         following_count = None
-                except NoSuchElementException:
+                except (NoSuchElementException, StaleElementReferenceException):
                     self.logger.error(
                         "Error occurred while getting following count "
                         "of '{}'".format(username.encode("utf-8"))
@@ -812,6 +838,7 @@ def get_relationship_counts(self, username):
     return followers_count, following_count
 
 
+@LogDecorator()
 def emergency_exit(self):
     """ Raise emergency if the is no connection to server OR if user is not
     logged in """
@@ -829,6 +856,7 @@ def emergency_exit(self):
     return False, "no emergency"
 
 
+@LogDecorator()
 def ping_server(host, logger):
     """
     Return True if host (str) responds to a ping request.
@@ -866,75 +894,7 @@ def ping_server(host, logger):
     return True
 
 
-def explicit_wait(self, track, ec_params, timeout=35, notify=True):
-    """
-    Explicitly wait until expected condition validates
-
-    :param self: iCerebro instance
-    :param track: short name of the expected condition
-    :param ec_params: expected condition specific parameters - [param1, param2]
-    :param timeout:
-    :param notify:
-
-    list of expected condition:
-        <https://seleniumhq.github.io/selenium/docs/api/py/webdriver_support/selenium.webdriver.support.expected_conditions.html>
-    """
-
-    VOEL = "VOEL"
-    TC = "TC"
-    PFL = "PFL"
-    SO = "SO"
-    tracks = {VOEL, TC, PFL, SO}
-    if track not in tracks:
-        raise ValueError(
-            "explicit_wait: track must be one of %r." % tracks)
-
-    if not isinstance(ec_params, list):
-        ec_params = [ec_params]
-
-    # find condition according to the tracks
-    if track == VOEL:
-        elem_address, find_method = ec_params
-        ec_name = "visibility of element located"
-        find_by = (
-            By.XPATH
-            if find_method == "XPath"
-            else By.CSS_SELECTOR
-            if find_method == "CSS"
-            else By.CLASS_NAME
-        )
-        locator = (find_by, elem_address)
-        condition = ec.visibility_of_element_located(locator)
-    elif track == TC:
-        expect_in_title = ec_params[0]
-        ec_name = "title contains '{}' string".format(expect_in_title)
-        condition = ec.title_contains(expect_in_title)
-    elif track == PFL:
-        ec_name = "page fully loaded"
-        condition = lambda browser: browser.execute_script(
-            "return document.readyState"
-        ) in ["complete" or "loaded"]
-    elif track == SO:
-        ec_name = "staleness of"
-        element = ec_params[0]
-
-        condition = ec.staleness_of(element)
-    else:
-        return False
-
-    # generic wait block
-    try:
-        wait = WebDriverWait(self.browser, timeout)
-        result = wait.until(condition)
-    except TimeoutException:
-        if notify is True:
-            self.logger.info(
-                "Timed out with failure while explicitly waiting until {}".format(ec_name)
-            )
-        return False
-    return result
-
-
+@LogDecorator()
 def is_page_available(self):
     """ Check if the page is available and valid """
     expected_keywords = ["Page Not Found", "Content Unavailable"]
@@ -956,6 +916,7 @@ def is_page_available(self):
     return True
 
 
+@LogDecorator()
 def get_page_title(self):
     """ Get the title of the web page """
     # wait for the current page fully load to get the correct page's title
@@ -989,18 +950,19 @@ def is_mandatory_character(self, uchr):
         )
 
 
+@LogDecorator()
 def check_character_set(self, unistr):
     if self.aborting:
         return self
     if not self.settings.mandatory_character:
         return True
-    print('self.settings.mandatory_character = {}'.format(self.settings.mandatory_character))
     self.check_letters = {}
     return all(
         is_mandatory_character(self, uchr) for uchr in unistr if uchr.isalpha()
     )
 
 
+@LogDecorator()
 def check_authorization(self, method, notify=True):
     """ Check if user is NOW logged in """
     if notify is True:
@@ -1011,7 +973,7 @@ def check_authorization(self, method, notify=True):
         user_link = "https://www.instagram.com/{}/".format(self.username)
         if not check_if_in_correct_page(self, user_link):
             go_to_bot_user_page(self)
-
+        check_for_error(self)
         # if user is not logged in, `activity_counts` will be `None`- JS `null`
         try:
             activity_counts = self.browser.execute_script(JS.ACTIVITY_COUNT)

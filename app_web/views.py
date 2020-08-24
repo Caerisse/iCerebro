@@ -129,9 +129,8 @@ def bot_run(request, username):
     bot_run_form = BotRunForm(tuple(bot_settings_name_list))
     if request.POST:
         if running_with:
-            iCerebro = ICerebro(running_with)
-            iCerebro.stop()
-            running_with = None
+            running_with.abort = True
+            running_with.save()
         else:
             running_with = BotSettings.objects.get(pk=request.POST['settings_name'])
             iCerebro = ICerebro(running_with)
@@ -156,9 +155,9 @@ def get_latest_logs(request, username):
         BotSettings.objects.get(icerebrouser=user, instauser=bot_account)
     except ObjectDoesNotExist:
         raise Http404("No bot with username {} registered in your account".format(username))
-    bot_logs = StatusLog.objects.filter(bot_username=username)[:10]
+    bot_logs = StatusLog.objects.filter(bot_username=username)[:20]
     latest_logs = reversed(bot_logs)
-    return HttpResponse(latest_logs)
+    return render(request, 'latest_logs.html', {'latest_logs': latest_logs})
 
 
 @login_required

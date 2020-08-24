@@ -23,8 +23,8 @@ class QuotaSupervisor:
         self.randomize_sleep_time = self.settings.qs_randomize_sleep_time
         self.max_extra_minutes = self.settings.qs_max_extra_sleep_minutes if self.settings.qs_max_extra_sleep_minutes else 5
         self.randomize_peak_number = self.settings.qs_randomize_peak_number
-        self.random_range_from = self.settings.qs_random_range_from if self.settings.qs_random_range_from else 0.9
-        self.random_range_to = self.settings.qs_random_range_to if self.settings.qs_random_range_to else 1.1
+        self.random_range_from = self.settings.qs_random_range_from if self.settings.qs_random_range_from else 1
+        self.random_range_to = self.settings.qs_random_range_to if self.settings.qs_random_range_to else 1
 
         self.peak_values_original = {
             self.SERVER_CALL: {
@@ -191,10 +191,11 @@ class QuotaSupervisor:
 
             if self.randomize_peak_number:
                 for action in self.ACTIONS:
-                    self.peak_values_current[action][self.DAY] = random.randrange(
-                        self.peak_values_original[action][self.DAY]*self.random_range_from,
-                        self.peak_values_original[action][self.DAY]*self.random_range_to
-                    )
+                    if self.peak_values_original[action][self.DAY]:
+                        self.peak_values_current[action][self.DAY] = random.randrange(
+                            int(self.peak_values_original[action][self.DAY]*self.random_range_from),
+                            int(self.peak_values_original[action][self.DAY]*self.random_range_to)
+                        )
 
         if self.last_hour != now.hour:
             self.last_hour = now.hour
@@ -204,7 +205,8 @@ class QuotaSupervisor:
 
             if self.randomize_peak_number:
                 for action in self.ACTIONS:
-                    self.peak_values_current[action][self.HOUR] = random.randrange(
-                        self.peak_values_original[action][self.HOUR]*self.random_range_from,
-                        self.peak_values_original[action][self.HOUR]*self.random_range_to
-                    )
+                    if self.peak_values_original[action][self.HOUR]:
+                        self.peak_values_current[action][self.HOUR] = random.randrange(
+                            int(self.peak_values_original[action][self.HOUR]*self.random_range_from),
+                            int(self.peak_values_original[action][self.HOUR]*self.random_range_to)
+                        )

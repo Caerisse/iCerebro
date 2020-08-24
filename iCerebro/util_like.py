@@ -8,10 +8,11 @@ from typing import List
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
+from iCerebro.util_loggers import LogDecorator
 from iCerebro.navigation import nf_scroll_into_view, nf_click_center_of_element, nf_find_and_press_back, \
-    check_if_in_correct_page, nf_go_from_post_to_profile
+    check_if_in_correct_page, nf_go_from_post_to_profile, explicit_wait, SoftBlockedException, check_for_error
 from iCerebro.util import Interactions, nf_get_all_posts_on_element, nf_validate_user_call, check_character_set, \
-    get_user_data, format_number, extract_text_from_element, explicit_wait, get_like_count
+    get_user_data, format_number, extract_text_from_element, get_like_count, sleep_while_blocked
 from iCerebro.util_db import store_post, store_comments, add_user_to_blacklist, is_follow_restricted, deform_emojis
 from iCerebro.util_follow import follow_user
 
@@ -20,6 +21,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
 
 
+@LogDecorator()
 def like_loop(
         self,
         what: str,
@@ -32,8 +34,12 @@ def like_loop(
     scroll_nap = 1.5
     already_interacted_links = []
     interactions = Interactions()
+    likes = 0
     try:
-        while interactions.liked_img in range(0, amount):
+        while likes in range(0, amount):
+            if self.aborting:
+                return interactions
+            
             if self.jumps.check_likes():
                 self.logger.warning(
                     "Like quotient reached its peak, leaving Like By {} activity".format(what)
@@ -83,13 +89,19 @@ def like_loop(
                         users_validated
                     )
                     interactions += post_interactions
-                    sleep(1)
-                    nf_find_and_press_back(self, base_link)
-                    already_interacted_links.append(link)
+                    if post_interactions.liked_img > 0:
+                        likes += 1
+                        self.logger.info("[{}] - Like [{}/{}]".format(
+                            what, likes, amount))
+                    if msg == "Soft blocked":
+                        sleep_while_blocked(self)
                     if msg == "block on likes":
                         # TODO deal with block on likes
                         pass
-
+                    else:
+                        sleep(1)
+                    nf_find_and_press_back(self, base_link)
+                    already_interacted_links.append(link)
                     break
             else:
                 # For loop ended means all posts in screen has been interacted with
@@ -99,13 +111,13 @@ def like_loop(
                     self.quota_supervisor.add_server_call()
                     sc_rolled += 1
                     sleep(scroll_nap)
-
     except Exception as err:
         self.logger.error("Unexpected Exception: {}".format(err))
     finally:
         return interactions
 
 
+@LogDecorator()
 def interact_with_post(
         self,
         link: str,
@@ -115,7 +127,11 @@ def interact_with_post(
     interactions = Interactions()
     try:
         self.logger.debug("Checking post")
-        inappropriate, user_name, is_video, image_links, reason, scope = check_post(self, link)
+        if verify_liked_image(self):
+            interactions.already_liked += 1
+            return "already liked", interactions
+        else:
+            inappropriate, user_name, is_video, image_links, reason, scope = check_post(self, link)
         if not inappropriate:
             self.logger.debug("Validating user")
             sleep(1)
@@ -124,8 +140,7 @@ def interact_with_post(
                 details = "User already validated"
             else:
                 valid, details = nf_validate_user_call(self, user_name, self.quota_supervisor.LIKE, link)
-
-            self.logger.info("{}Valid User, details: {}".format("" if valid else "Not ", details))
+                self.logger.info("{}Valid User, details: {}".format("" if valid else "Not ", details))
 
             if not valid:
                 interactions.not_valid_users += 1
@@ -138,8 +153,6 @@ def interact_with_post(
 
             if like_state is True:
                 interactions.liked_img += 1
-                self.logger.info("Like [{}/{}]".format(interactions.liked_img, amount))
-                self.logger.info(link)
                 # reset jump counter after a successful like
                 self.jumps.likes = 0
 
@@ -174,18 +187,19 @@ def interact_with_post(
                     # if success:
                     #     interactions.commented += 1
                 else:
-                    self.logger.info("Not commented")
+                    if self.settings.do_comment:
+                        self.logger.info("Not commented")
                     sleep(1)
 
                 # follow
                 if (
-                        self.settings.do_follow
+                        not user_validated
+                        and self.settings.do_follow
                         and user_name not in self.settings.dont_include
                         and checked_img
                         and following
                         and not is_follow_restricted(self, user_name)
                 ):
-
                     self.logger.debug("Following user")
                     sleep(1)
                     follow_state, msg = follow_user(self, "post", user_name, None)
@@ -195,7 +209,8 @@ def interact_with_post(
                     elif msg == "already followed":
                         interactions.already_followed += 1
                 else:
-                    self.logger.info("Not followed")
+                    if self.settings.do_follow and not user_validated:
+                        self.logger.info("Not followed")
                     sleep(1)
 
                 # interact (only of user not previously validated to impede recursion)
@@ -235,11 +250,14 @@ def interact_with_post(
     except NoSuchElementException as err:
         self.logger.error("Invalid Page: {}".format(err))
         return "Invalid Page", interactions
+    except SoftBlockedException:
+        return "Soft blocked", interactions
     except Exception as err:
         self.logger.error("Unexpected Exception: {}".format(err))
         return "Unexpected Exception", interactions
 
 
+@LogDecorator()
 def get_media_edge_comment_string(media):
     options = ["edge_media_to_comment", "edge_media_preview_comment"]
     for option in options:
@@ -250,6 +268,7 @@ def get_media_edge_comment_string(media):
         return option
 
 
+@LogDecorator()
 def check_post(
         self,
         post_link: str
@@ -269,6 +288,8 @@ def check_post(
     try:
         username = self.browser.find_element_by_xpath(XP.POST_USERNAME)
         username_text = username.text
+        if "\nVerified" in username_text:
+            username_text = username_text.replace("\nVerified", "")
 
         # follow_button = self.browser.find_element_by_xpath(POST_FOLLOW_BUTTON)
         # following = follow_button.text == "Following"
@@ -293,8 +314,9 @@ def check_post(
             nf_scroll_into_view(self, more_button[0])
             more_button[0].click()
 
-        caption = self.browser.find_element_by_xpath(XP.POST_CAPTION).text
-        caption = "" if caption is None else caption
+        caption = self.browser.find_elements_by_xpath(XP.POST_CAPTION)
+        caption = caption[0].text if caption else ""
+        caption = caption if caption is not None else ""
         caption, emoji_less_caption = deform_emojis(caption)
 
         for image in images:
@@ -307,13 +329,18 @@ def check_post(
 
             image_descriptions.append(image_description)
             image_links.append(image.get_attribute('src'))
-
-        self.logger.info("Image from: {}".format(username_text.encode("utf-8")))
-        self.logger.info("Link: {}".format(post_link.encode("utf-8")))
-        self.logger.info("Caption: {}".format(caption.encode("utf-8")))
+        
+        log = ""
+        log += "Post from: {}\n".format(username_text.encode("utf-8"))
+        log += "Link: {}\n".format(post_link.encode("utf-8"))
+        log += "Caption: {}\n".format(caption.encode("utf-8"))
         for image_description in image_descriptions:
             if image_description:
-                self.logger.info("Description: {}".format(image_description.encode("utf-8")))
+                log += "Description: {}\n".format(image_description.encode("utf-8"))
+        if location_text:
+            log += "Location: {}".format(location_text.encode("utf-8"))
+        self.logger.info(log)
+                
 
         # Check if likes_count is between minimum and maximum values defined by user
         if self.settings.delimit_liking:
@@ -360,7 +387,6 @@ def check_post(
 
         # Append location to image_text so we can search through both in one go
         if location_text:
-            self.logger.info("Location: {}".format(location_text.encode("utf-8")))
             caption = caption + "\n" + location_text
 
         if self.settings.mandatory_words:
@@ -424,17 +450,17 @@ def check_post(
             post_date = datetime.fromisoformat(post_date[:-1])
         except NoSuchElementException:
             post_date = datetime.now()
-        self.logger.info("Storing Post")
+        self.logger.debug("Storing Post")
         post = store_post(post_link, username_text, post_date, image_links,
                           caption, likes_count, image_descriptions)
-        self.logger.info("Storing Comments")
+        self.logger.debug("Storing Comments")
         store_comments(self, post)
         elapsed_time = perf_counter() - t
         self.logger.info("Check post elapsed time: {:.0f} seconds".format(elapsed_time))
 
 
-
-def like_image(self, username):
+@LogDecorator()
+def like_image(self, username, trying_again=False):
     """Likes the browser opened image"""
     # check action availability
     if self.quota_supervisor.jump_like():
@@ -444,6 +470,8 @@ def like_image(self, username):
     like_elem = self.browser.find_elements_by_xpath(XP.LIKE)
 
     if len(like_elem) == 1:
+        sleep(1)
+        nf_scroll_into_view(self, like_elem[0])
         sleep(1)
         nf_click_center_of_element(self, like_elem[0])
         # check now we have unlike instead of like
@@ -459,10 +487,13 @@ def like_image(self, username):
 
             return True, "success"
 
-        else:
+        elif not trying_again:
             # if like not seceded wait for 2 min
-            self.logger.info("Couldn't like post, may be soft-blocked, bot will sleep for 2 minutes")
+            self.logger.info("Couldn't like post, may be soft-blocked, bot will sleep for 2 minutes and try again")
             sleep(120)
+            like_image(self, username, True)
+        else:
+            return False, "block on likes"
 
     else:
         liked_elem = self.browser.find_elements_by_xpath(XP.UNLIKE)
@@ -474,6 +505,7 @@ def like_image(self, username):
     return False, "invalid element"
 
 
+@LogDecorator()
 def verify_liked_image(self):
     """Check for a ban on likes using the last liked image"""
     self.browser.refresh()
@@ -482,12 +514,10 @@ def verify_liked_image(self):
     if len(like_elem) == 1:
         return True
     else:
-        self.logger.warning(
-            "Bot has a block on likes"
-        )
         return False
 
 
+@LogDecorator()
 def get_tags(self):
     """Gets all the tags of the given description in the url"""
     try:
@@ -508,6 +538,7 @@ def get_tags(self):
     return tags
 
 
+@LogDecorator()
 def like_comment(self, original_comment_text):
     """ Like the given comment """
     try:

@@ -7,7 +7,9 @@
 {% if running_with != None %}
     <p>Bot is running with settings {{running_with}}</p>
 {% endif %}
+
 <p>Choose settings:</p>
+
 <form action="" method="post">
     {% csrf_token %}
     {{bot_run_form}}
@@ -18,25 +20,29 @@
     {% endif %}
 </form>
 
-<!--{% if running_with != None %}-->
-<!--<head>-->
-<!--    <script src="http://code.jquery.com/jquery-latest.min.js"></script>-->
-<!--</head>-->
-
-<!--<body>-->
-<!--[<div id="console"></div>]-->
-<!--<script>-->
-<!--$(document).ready(function() {-->
-<!--  $.ajaxSetup({ cache: false });-->
-<!--  var my_refresh = setInterval(function() {-->
-<!--    $('#console').load('/bot/run/{{bot_username}}/get_latest_logs');-->
-<!--  }, 1000);-->
-<!--});-->
-
-<!--</script>-->
-<!--</body>-->
-<!--{% endif %}-->
-
+{% if running_with != None %}
+    <head>
+        <script src="http://code.jquery.com/jquery-latest.min.js"></script>
+        <style>
+            table, th, td {
+                border: 1px solid black;
+                border-collapse: collapse;
+                padding: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="console"></div>
+        <script>
+            $(document).ready(function() {
+                $.ajaxSetup({ cache: false });
+                var my_refresh = setInterval(function() {
+                    $('#console').load('/bot/run/{{bot_username}}/get_latest_logs');
+                }, 5000);
+            });
+        </script>
+    </body>
+{% endif %}
 
 
 {% endblock %}

@@ -10,10 +10,9 @@ from selenium.common.exceptions import MoveTargetOutOfBoundsException
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-from iCerebro.navigation import web_address_navigator
+from iCerebro.navigation import web_address_navigator, explicit_wait, SoftBlockedException
 from iCerebro.navigation import nf_click_center_of_element
-from iCerebro.util import check_authorization
-from iCerebro.util import explicit_wait
+from iCerebro.util import check_authorization, sleep_while_blocked
 from iCerebro.util_db import get_cookies, save_cookies
 
 
@@ -182,7 +181,11 @@ def login_user(
         self.browser.execute_script(JS.RELOAD)
         self.quota_supervisor.add_server_call()
         # cookie has been loaded, so the user should be logged in
-        login_state = check_authorization(self, "activity counts", False)
+        try:
+            login_state = check_authorization(self, "activity counts", False)
+        except SoftBlockedException:
+            sleep_while_blocked(self)
+            login_state = check_authorization(self, "activity counts", False)
         if login_state is True:
             dismiss_notification_offer(self)
             return True
