@@ -93,8 +93,8 @@ class ICerebro:
 
     def run(self):
         try:
-            self.display = Display(visible=0, size=(800, 600))
-            self.display.start()
+            # self.display = Display(visible=0, size=(800, 600))
+            # self.display.start()
             self.browser = set_selenium_local_session(self)
             self.login()
             # self.like_by_tags(random.sample(self.settings.hashtags, 3), 5)
