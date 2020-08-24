@@ -200,7 +200,7 @@ USE_L10N = True
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATIC_URL = "/static/"
 
-django_heroku.settings(locals())
+django_heroku.settings(locals(), logging=False)
 
 """ 
 CELERY_RESULT_BACKEND = 'django-db'
