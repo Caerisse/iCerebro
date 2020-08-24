@@ -137,7 +137,7 @@ LOGGING = {
             'formatter': 'msg',
         },
     },
-    'root': {
+    '': {
         'level': 'DEBUG',
         'handlers': ['console'],
     },

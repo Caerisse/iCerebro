@@ -104,8 +104,9 @@ class ICerebro:
             #     self.like_by_feed(10)
         finally:
             close_browser(self.browser, True, self.logger)
-            with interruption_handler(threaded=True):
-                self.display.stop()
+            if self.display:
+                with interruption_handler(threaded=True):
+                    self.display.stop()
             self.logger.info("iCerebro stopped")
             self.settings.abort = False
             self.settings.running = False
