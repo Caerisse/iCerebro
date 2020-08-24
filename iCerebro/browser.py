@@ -67,13 +67,12 @@ def set_selenium_local_session(
     )
 
     firefox_options = Firefox_Options()
-    firefox_bin = os.environ.get('FIREFOX_BIN')
-    if firefox_bin:
-        firefox_options.binary_location = firefox_bin
 
     #if self.settings.headless_browser:
     # TODO: remove comment before commiting to server
-    firefox_options.add_argument("-headless")
+    firefox_options.add_argument("--headless")
+    firefox_options.add_argument("--disable-gpu")
+    firefox_options.add_argument("--no-sandbox")
 
     firefox_profile = webdriver.FirefoxProfile()
 
@@ -98,7 +97,9 @@ def set_selenium_local_session(
     firefox_profile.set_preference("media.volume_scale", "0.0")
 
     driver_path = get_geckodriver()
+    firefox_bin = os.environ.get('FIREFOX_BIN')
     browser = webdriver.Firefox(
+        firefox_binary=firefox_bin,
         firefox_profile=firefox_profile,
         executable_path=driver_path,
         options=firefox_options,
