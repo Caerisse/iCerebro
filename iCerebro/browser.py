@@ -12,15 +12,21 @@ from os.path import sep
 from time import sleep
 
 from iCerebro.util import interruption_handler
+from iCerebro.util_loggers import LogDecorator
 
 
+@LogDecorator()
 def use_assets():
     # TODO: change as appropriate to server
     return os.getcwd()
 
 
+@LogDecorator()
 def get_geckodriver():
     # prefer using geckodriver from path
+    gecko_path = os.environ.get('GECKODRIVER_PATH')
+    if gecko_path:
+        return gecko_path
     if os.path.isfile('./geckodriver'):
         return './geckodriver'
     gecko_path = shutil.which("geckodriver") or shutil.which("geckodriver.exe")
@@ -34,6 +40,7 @@ def get_geckodriver():
     return sym_path
 
 
+@LogDecorator()
 def create_firefox_extension():
     ext_path = os.path.abspath(os.path.dirname(__file__) + sep + "firefox_extension")
     # safe into assets folder
@@ -47,6 +54,7 @@ def create_firefox_extension():
     return zip_file
 
 
+@LogDecorator()
 def set_selenium_local_session(
     self
 ):
@@ -59,6 +67,9 @@ def set_selenium_local_session(
     )
 
     firefox_options = Firefox_Options()
+    firefox_bin = os.environ.get('FIREFOX_BIN')
+    if firefox_bin:
+        firefox_options.binary_location = firefox_bin
 
     #if self.settings.headless_browser:
     # TODO: remove comment before commiting to server
@@ -110,6 +121,7 @@ def set_selenium_local_session(
     return browser
 
 
+@LogDecorator()
 def proxy_authentication(browser, logger, proxy_username, proxy_password):
     """ Authenticate proxy using popup alert window """
 
@@ -135,6 +147,7 @@ def proxy_authentication(browser, logger, proxy_username, proxy_password):
         logger.warn("Unable to proxy authenticate")
 
 
+@LogDecorator()
 def close_browser(browser, threaded_session, logger):
     with interruption_handler(threaded=threaded_session):
         # delete cookies
@@ -158,6 +171,7 @@ def close_browser(browser, threaded_session, logger):
                 )
 
 
+@LogDecorator()
 def retry(max_retry_count=3, start_page=None):
     """
         Decorator which refreshes the page and tries to execute the function again.
