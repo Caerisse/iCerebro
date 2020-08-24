@@ -92,7 +92,7 @@ LOGGING = {
     'formatters': {
         'django.server': DEFAULT_LOGGING['formatters']['django.server'],
         'verbose': {
-            'format': '[%(asctime)s] %(levelname)s [%(pathname)s.%(funcName)s:%(lineno)d] %(message)s',
+            'format': '[%(asctime)s] %(levelname)s [%(name)s] [%(pathname)s.%(funcName)s:%(lineno)d] %(message)s',
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
         'simple': {
