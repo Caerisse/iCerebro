@@ -24,6 +24,8 @@ urlpatterns = [
          app_web.views.bot_settings_view, name="bot_settings_new"),
     path("bot/settings/<str:username>/<str:settings_name>/",
          app_web.views.bot_settings_view, name="bot_settings"),
+    path("bot/run/settings/<str:username>/",
+         app_web.views.bot_run_settings_view, name="bot_run_settings"),
     path("bot/run/<str:username>/",
          app_web.views.bot_run, name="bot_run"),
     path("bot/run/<str:username>/get_latest_logs/",

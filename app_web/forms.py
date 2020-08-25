@@ -21,6 +21,13 @@ class BotSettingsForm(forms.ModelForm):
         exclude = ['icerebrouser', 'abort', 'running', 'instauser']
 
 
+class BotRunSettingsForm(forms.ModelForm):
+    class Meta:
+        model = BotRunSettings
+        fields = '__all__'
+        exclude = ['bot']
+
+
 class BotRunForm(forms.Form):
     settings_name = forms.ChoiceField()
 

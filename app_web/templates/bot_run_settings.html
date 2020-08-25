@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+
+{% if bot_run_settings_form %}
+    <form method="post" action="">
+        {% csrf_token %}
+        <table>
+            {{bot_run_settings_form.as_table}}
+        </table>
+        <input type="submit" value="Save settings"/>
+    </form>
+{% else %}
+    <p>Missing bot run settings form</p>
+{% endif %}
+
+{% endblock %}

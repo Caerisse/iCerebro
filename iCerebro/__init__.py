@@ -7,7 +7,7 @@ from typing import List, Union
 from pyvirtualdisplay import Display
 from selenium.common.exceptions import WebDriverException, NoSuchElementException
 
-from app_main.models import BotSettings, BotFollowed
+from app_main.models import BotSettings, BotFollowed, BotRunSettings
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
 from iCerebro.browser import set_selenium_local_session, close_browser
@@ -31,7 +31,8 @@ class ICerebro:
 
     def __init__(
             self,
-            settings: BotSettings
+            settings: BotSettings,
+            run_settings: BotRunSettings
     ):
         self.thread = None
         self.update_thread = None
@@ -243,7 +244,7 @@ class ICerebro:
                     interactions.not_valid_users += 1
                     continue
 
-            interactions += like_loop(self, "User", user_link, amount, users_validated)
+            interactions += like_loop(self, "User", user_link, amount, True)
 
             self.logger.info(
                 "Like by User [{}/{}]: {} - ended".format(

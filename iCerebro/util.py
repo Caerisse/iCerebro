@@ -1,7 +1,7 @@
 import signal
 import unicodedata
 from contextlib import contextmanager
-from time import sleep, time
+from time import sleep, time, perf_counter
 import random
 import re
 from typing import List, Tuple
@@ -154,7 +154,6 @@ def sleep_while_blocked(self):
             pass
 
 
-@LogDecorator()
 def nf_get_all_posts_on_element(
         element: WebElement
 ) -> List[WebElement]:

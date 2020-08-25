@@ -100,11 +100,43 @@ def bot_settings_view(request, username=None, settings_name=None):
             bot_settings.icerebrouser = user
             bot_settings.instauser, _ = InstaUser.objects.get_or_create(username=insta_username)
             bot_settings.save()
-            return redirect("/bot/run/{}/".format(bot_settings.instauser.username))
+            return redirect("/bot/run/settings/{}/".format(bot_settings.instauser.username))
     else:
         bot_settings_form = BotSettingsForm(**form_args)
 
     return render(request, 'bot_settings.html', {'bot_settings_form': bot_settings_form})
+
+
+@login_required
+def bot_run_settings_view(request, username):
+    try:
+        user = ICerebroUser.objects.get(user=request.user)
+    except ObjectDoesNotExist:
+        raise Http404("User does not exist")
+    try:
+        bot_account = InstaUser.objects.get(username=username)
+    except ObjectDoesNotExist:
+        raise Http404("Bot does not exist")
+
+    form_args = {}
+    try:
+        bot_run_settings = BotRunSettings.objects.get(bot=bot_account)
+        form_args['instance'] = bot_run_settings
+    except ObjectDoesNotExist:
+        pass
+
+    if request.POST:
+        form_args['data'] = request.POST
+        bot_run_settings_form = BotRunSettingsForm(**form_args)
+        if bot_run_settings_form.is_valid():
+            bot_run_settings = bot_run_settings_form.save(commit=False)
+            bot_run_settings.bot = bot_account
+            bot_run_settings.save()
+            return redirect("/bot/run/{}/".format(bot_run_settings.bot.username))
+    else:
+        bot_run_settings_form = BotRunSettingsForm(**form_args)
+
+    return render(request, 'bot_run_settings.html', {'bot_run_settings_form': bot_run_settings_form})
 
 
 @login_required
@@ -132,8 +164,12 @@ def bot_run(request, username):
             running_with.abort = True
             running_with.save()
         else:
+            try:
+                bot_run_settings = BotRunSettings.objects.get(bot=bot_account)
+            except ObjectDoesNotExist:
+                raise Http404("No bot run settings for bot with username {}".format(username))
             running_with = BotSettings.objects.get(pk=request.POST['settings_name'])
-            iCerebro = ICerebro(running_with)
+            iCerebro = ICerebro(running_with, bot_run_settings)
             iCerebro.start()
     return render(request, 'bot_run.html',
                   {

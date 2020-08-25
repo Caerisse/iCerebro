@@ -133,12 +133,12 @@ def interact_with_post(
         else:
             inappropriate, user_name, is_video, image_links, reason, scope = check_post(self, link)
         if not inappropriate:
-            self.logger.debug("Validating user")
             sleep(1)
             if user_validated:
                 valid = True
                 details = "User already validated"
             else:
+                self.logger.debug("Validating user")
                 valid, details = nf_validate_user_call(self, user_name, self.quota_supervisor.LIKE, link)
                 self.logger.info("{}Valid User, details: {}".format("" if valid else "Not ", details))
 

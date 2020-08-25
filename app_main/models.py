@@ -436,3 +436,108 @@ class BotScheduledPost(models.Model):
 
     class Meta:
         db_table = "bot_scheduled_post"
+
+
+class BotRunSettings(models.Model):
+    objects = models.Manager()
+
+    bot = models.OneToOneField(InstaUser, on_delete=models.CASCADE, related_name="run_settings")
+
+    CHOICES_ACTIONS = (
+        ('None', 'None'),
+        ('like_by_tags', 'Like by tags'),
+        ('like_by_users', 'Like by users'),
+        ('like_by_feed', 'Like by feed'),
+        ('like_by_location', 'Like by location'),
+        ('follow_user_follow', 'Follow user follow'),
+        ('follow_by_list', 'Follow by list'),
+        ('follow_by_tag', 'Follow by tag'),
+        ('follow_by_locations', 'Follow by locations'),
+        ('unfollow_users', 'Unfollow users')
+    )
+    do_from_00 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_01 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_02 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_03 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_04 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_05 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_06 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_07 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_08 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_09 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_10 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_11 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_12 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_13 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_14 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_15 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_16 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_17 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_18 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_19 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_20 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_21 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_22 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+    do_from_23 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
+
+    # Like by Tags
+    # Will randomly order hashtags in BotSettings and like amount_per_tag before moving to the next
+    like_by_tags_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=10)
+    like_by_tags_settings_skip_top_post = models.BooleanField(default=False)
+    # Like by Users
+    like_by_users_settings_usernames = ArrayField(models.TextField())
+    like_by_users_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=3)
+    like_by_users_settings_validated = models.BooleanField(default=False)
+    # Like by Feed
+    like_by_feed_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=30)
+    # Like by Location
+    # Same as like by tags but using locations_hashtags
+    like_by_location_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=3)
+    like_by_location_settings_skip_top_post = models.BooleanField(default=False)
+    # Follow user Follow
+    # Follow user that follow or are followed by users in similar account list in BotSettings
+    CHOICES_WHAT = (
+        ('followers', 'Followers'),
+        ('followings', 'Followings'),
+    )
+    follow_user_follow_settings_what = models.CharField(choices=CHOICES_WHAT, default='followers', max_length=20)
+    follow_user_follow_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=10)
+    follow_user_follow_settings_randomize = models.BooleanField(default=False)
+    # Follow by list
+    follow_by_list_settings_usernames = ArrayField(models.TextField())
+    follow_by_list_settings_validated = models.BooleanField(default=False)
+    # Follow by tag
+    # Same as like by tag but will follow users instead of liking their images
+    follow_by_tags_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=10)
+    follow_by_tags_settings_skip_top_post = models.BooleanField(default=False)
+    # Like by Location
+    # Same as follow by tags but using locations_hashtags
+    follow_by_locations_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=10)
+    follow_by_locations_settings_skip_top_post = models.BooleanField(default=False)
+    # Unfollow users
+    # unfollows users in selected list and track.
+    # If List is Followed by bot then you can choose to unfollow only users  that the bot followed
+    # more than unfollow_users_settings_after_hours hours.
+    # If you choose to not unfollow active users the bot will check the users who liked your lasts
+    # unfollow_users_settings_posts_to_check with the given boundary, if none it gill grab all users, if
+    # 0 it will grab the visible users when clicking to see who liked the image, else will grab users until it has
+    # the requested number or all users
+    CHOICES_LIST = (
+        ('all', 'All'),
+        ('iCerebro_followed', 'Followed by bot'),
+    )
+    CHOICES_TRACK = (
+        ('all', 'All'),
+        ('nonfollowers', 'Non Followers'),
+    )
+    unfollow_users_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=10)
+    unfollow_users_settings_list = models.CharField(choices=CHOICES_LIST, default='iCerebro_followed', max_length=20)
+    unfollow_users_settings_track = models.CharField(choices=CHOICES_TRACK, default='nonfollowers', max_length=20)
+    unfollow_users_settings_after_hours = models.IntegerField(validators=[MinValueValidator(0)], default=48)
+    unfollow_users_settings_dont_unfollow_active_users = models.BooleanField(default=False)
+    unfollow_users_settings_posts_to_check = models.IntegerField(validators=[MinValueValidator(1)], default=3)
+    unfollow_users_settings_boundary_to_check = models.IntegerField(validators=[MinValueValidator(0)],
+                                                                    default=None, null=True)
+
+    class Meta:
+        db_table = "bot_run_settings"

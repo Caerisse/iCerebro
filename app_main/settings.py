@@ -154,10 +154,12 @@ LOGGING = {
         },
         'py.warnings': {
             'handlers': ['console'],
+            'propagate': False
         },
         'decorator': {
             'level': 'DEBUG',
-            'handlers': ['console_simple']
+            'handlers': ['console_simple'],
+            'propagate': False
         },
         'db': {
             'level': 'INFO',
