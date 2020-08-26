@@ -1,7 +1,7 @@
 import random
 import threading
 from datetime import datetime, timedelta
-from time import sleep, time
+from time import sleep
 from typing import List, Union
 
 from pyvirtualdisplay import Display
@@ -10,7 +10,6 @@ from selenium.common.exceptions import WebDriverException, NoSuchElementExceptio
 from app_main.models import BotSettings, BotFollowed, BotRunSettings
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-from iCerebro.browser import set_selenium_local_session, close_browser
 from iCerebro.navigation import nf_go_to_tag_page, check_if_in_correct_page, nf_go_from_post_to_profile, \
     nf_go_to_user_page, nf_go_to_home, nf_go_to_follow_page, nf_find_and_press_back, nf_scroll_into_view, \
     nf_click_center_of_element, go_to_bot_user_page
@@ -25,6 +24,7 @@ from iCerebro.util_follow import follow_user, get_followers, unfollow_loop
 from iCerebro.util_like import like_loop
 from iCerebro.util_login import login_user
 from iCerebro.util_loggers import IceLogger
+from iCerebro.run import run
 
 
 class ICerebro:
@@ -36,8 +36,8 @@ class ICerebro:
     ):
         self.thread = None
         self.update_thread = None
-        self.start_time = time()
         self.settings = settings
+        self.run_settings = run_settings
         self.instauser = self.settings.instauser
         self.username = self.settings.instauser.username
 
@@ -68,6 +68,8 @@ class ICerebro:
         #        self.settings.classification_model_name, self.settings.detection_model_name)
         # else:
         self.ImgAn = None
+        
+        self.until_time = None
 
     def start(self):
         self.logger.info("iCerebro Started")
@@ -75,7 +77,7 @@ class ICerebro:
         self.settings.running = True
         self.settings.save()
         
-        self.thread = threading.Thread(target=self.run, args=())
+        self.thread = threading.Thread(target=run, args=(self,))
         self.thread.daemon = True
         self.thread.start()
         
@@ -91,27 +93,6 @@ class ICerebro:
             if self.settings.abort:
                 self.logger.info("iCerebro will stop soon")
                 self.aborting = True
-
-    def run(self):
-        try:
-            # self.display = Display(visible=0, size=(800, 600))
-            # self.display.start()
-            self.browser = set_selenium_local_session(self)
-            self.login()
-            # self.like_by_tags(random.sample(self.settings.hashtags, 3), 5)
-            self.like_by_feed(10)
-            # while not self.aborting:
-            #     # TODO, add settings about what to do while running
-            #     self.like_by_feed(10)
-        finally:
-            close_browser(self.browser, True, self.logger)
-            if self.display:
-                with interruption_handler(threaded=True):
-                    self.display.stop()
-            self.logger.info("iCerebro stopped")
-            self.settings.abort = False
-            self.settings.running = False
-            self.settings.save()
 
     def login(self):
         """Used to login the user with username and password"""
@@ -152,6 +133,9 @@ class ICerebro:
 
         for index, tag in enumerate(tags):
             if self.quotient_breach:
+                break
+            
+            if self.until_time and datetime.now() > self.until_time:
                 break
 
             self.logger.info(
@@ -222,6 +206,10 @@ class ICerebro:
         for index, username in enumerate(usernames):
             if self.quotient_breach:
                 break
+            
+            if self.until_time and datetime.now() > self.until_time:
+                break
+            
             interactions = Interactions()
             self.logger.info(
                 "Like by User [{}/{}]: {} - started".format(
@@ -298,6 +286,12 @@ class ICerebro:
         self.logger.info("Starting to follow users {}".format(follow))
 
         for index, username in enumerate(usernames):
+            if self.quotient_breach:
+                break
+            
+            if self.until_time and datetime.now() > self.until_time:
+                break
+            
             interactions = Interactions()
             self.logger.info("Follow User {} [{}/{}] - started".format(follow, index + 1, len(usernames)))
             self.logger.info("--> {}".format(username.encode("utf-8")))
@@ -464,7 +458,7 @@ class ICerebro:
     def follow_by_list(
             self,
             follow_list: list,
-            users_validated: bool = False,
+            users_validated: bool = False
     ):
         if self.aborting:
             return self
@@ -472,6 +466,12 @@ class ICerebro:
         interactions = Interactions()
 
         for index, username in enumerate(follow_list):
+            if self.quotient_breach:
+                break
+            
+            if self.until_time and datetime.now() > self.until_time:
+                break
+            
             self.logger.info("Follow User [{}/{}] - started".format(index + 1, len(follow_list)))
             if self.jumps.check_follows():
                 self.logger.warning(
@@ -533,7 +533,7 @@ class ICerebro:
             self,
             tags: List[str],
             amount: int = 10,
-            skip_top_posts: bool = True,
+            skip_top_posts: bool = True
     ):
         # TODO
         return self
@@ -542,7 +542,7 @@ class ICerebro:
             self,
             locations: List[str],
             amount: int = 10,
-            skip_top_posts: bool = True,
+            skip_top_posts: bool = True
     ):
         # TODO
         return self

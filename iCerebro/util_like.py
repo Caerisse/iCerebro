@@ -39,6 +39,9 @@ def like_loop(
         while likes in range(0, amount):
             if self.aborting:
                 return interactions
+
+            if self.until_time and datetime.now() > self.until_time:
+                return interactions
             
             if self.jumps.check_likes():
                 self.logger.warning(
@@ -85,7 +88,6 @@ def like_loop(
                     msg, post_interactions = interact_with_post(
                         self,
                         link,
-                        amount,
                         users_validated
                     )
                     interactions += post_interactions
@@ -121,7 +123,6 @@ def like_loop(
 def interact_with_post(
         self,
         link: str,
-        amount: int,
         user_validated: bool = False,
 ) -> Tuple[str, Interactions]:  # msg, post_interactions
     interactions = Interactions()

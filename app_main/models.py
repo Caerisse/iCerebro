@@ -480,20 +480,26 @@ class BotRunSettings(models.Model):
     do_from_22 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
     do_from_23 = models.CharField(choices=CHOICES_ACTIONS, default='None', max_length=30)
 
+    repeat_action_if_ended_before_time = models.BooleanField(default=False)
+
     # Like by Tags
     # Will randomly order hashtags in BotSettings and like amount_per_tag before moving to the next
     like_by_tags_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=10)
     like_by_tags_settings_skip_top_post = models.BooleanField(default=False)
+    
     # Like by Users
-    like_by_users_settings_usernames = ArrayField(models.TextField())
+    like_by_users_settings_usernames = ArrayField(models.TextField(), blank=True, null=True)
     like_by_users_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=3)
     like_by_users_settings_validated = models.BooleanField(default=False)
+    
     # Like by Feed
     like_by_feed_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=30)
+    
     # Like by Location
     # Same as like by tags but using locations_hashtags
     like_by_location_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=3)
     like_by_location_settings_skip_top_post = models.BooleanField(default=False)
+    
     # Follow user Follow
     # Follow user that follow or are followed by users in similar account list in BotSettings
     CHOICES_WHAT = (
@@ -503,17 +509,21 @@ class BotRunSettings(models.Model):
     follow_user_follow_settings_what = models.CharField(choices=CHOICES_WHAT, default='followers', max_length=20)
     follow_user_follow_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=10)
     follow_user_follow_settings_randomize = models.BooleanField(default=False)
+    
     # Follow by list
-    follow_by_list_settings_usernames = ArrayField(models.TextField())
+    follow_by_list_settings_usernames = ArrayField(models.TextField(), blank=True, null=True)
     follow_by_list_settings_validated = models.BooleanField(default=False)
+    
     # Follow by tag
     # Same as like by tag but will follow users instead of liking their images
     follow_by_tags_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=10)
     follow_by_tags_settings_skip_top_post = models.BooleanField(default=False)
+    
     # Like by Location
     # Same as follow by tags but using locations_hashtags
     follow_by_locations_settings_amount_per_tag = models.IntegerField(validators=[MinValueValidator(1)], default=10)
     follow_by_locations_settings_skip_top_post = models.BooleanField(default=False)
+    
     # Unfollow users
     # unfollows users in selected list and track.
     # If List is Followed by bot then you can choose to unfollow only users  that the bot followed
@@ -537,7 +547,7 @@ class BotRunSettings(models.Model):
     unfollow_users_settings_dont_unfollow_active_users = models.BooleanField(default=False)
     unfollow_users_settings_posts_to_check = models.IntegerField(validators=[MinValueValidator(1)], default=3)
     unfollow_users_settings_boundary_to_check = models.IntegerField(validators=[MinValueValidator(0)],
-                                                                    default=None, null=True)
+                                                                    default=None, blank=True, null=True)
 
     class Meta:
         db_table = "bot_run_settings"

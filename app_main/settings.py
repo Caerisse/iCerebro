@@ -142,10 +142,11 @@ LOGGING = {
     #     'handlers': ['console'],
     # },
     'loggers': {
-        '': {
-            'level': 'DEBUG',
-            'handlers': ['console'],
-        },
+        # TODO: uncomment before deploying
+        #'': {
+        #    'level': 'DEBUG',
+        #    'handlers': ['console'],
+        #},
         'django.server': DEFAULT_LOGGING['loggers']['django.server'],
         'django.security': {
             'handlers': ['mail_admins'],
