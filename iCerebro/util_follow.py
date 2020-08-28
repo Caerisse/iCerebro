@@ -1,3 +1,4 @@
+from datetime import datetime
 import random
 from time import sleep
 from typing import Union
@@ -38,10 +39,14 @@ def unfollow_loop(
         sleep_counter = 0
         sleep_after = random.randint(8, 12)
         for person in unfollow_list:
+            if self.aborting or (self.until_time and datetime.now() > self.until_time):
+                break
+
             if unfollowed >= amount:
                 break
 
             if self.jumps.check_unfollows():
+                self.quotient_breach = True
                 self.logger.warning(
                     "Unfollow quotient reached its peak, leaving Unfollow Users activity")
                 self.jumps.unfollows = 0
@@ -59,12 +64,11 @@ def unfollow_loop(
                 sleep(delay_random)
                 sleep_counter = 0
                 sleep_after = random.randint(8, 12)
-                pass
 
             if person not in skip_set:
                 self.logger.info(
                     "Unfollow [{}/{}]: now unfollowing '{}'...".format(
-                        unfollowed + 1, amount, person.encode("utf-8"))
+                        unfollowed + 1, amount, person)
                 )
                 nf_go_to_user_page(self, person)
                 if is_page_available(self):
@@ -89,12 +93,11 @@ def unfollow_loop(
                         # will break the loop after certain consecutive jumps
                         self.jumps.unfollows += 1
 
-                    elif msg in ["temporary block", "not connected", "not logged in"]:
+                    elif msg in ["temporarily blocked", "not connected", "not logged in"]:
                         # break the loop in extreme conditions to prevent
                         # misbehaviour
                         self.logger.warning(
-                            "There is a serious issue: '{}'!\t~leaving "
-                            "Unfollow Users activity".format(msg)
+                            "Bot is '{}', leaving Unfollow Users activity".format(msg)
                         )
                         break
     except BaseException as e:
@@ -207,7 +210,7 @@ def get_following_status(
         if not follow_button:
             # cannot find the any of the expected buttons
             self.logger.error(
-                "Unable to detect the following status of '{}'".format(person.encode("utf-8"))
+                "Unable to detect the following status of '{}'".format(person)
             )
             return "UNAVAILABLE", None
 
@@ -294,7 +297,7 @@ def follow_user(
         nf_click_center_of_element(self, button)
 
     # general tasks after a successful follow
-    self.logger.info("Followed '{}".format(user_name.encode("utf-8")))
+    self.logger.info("Followed '{}".format(user_name))
     add_follow_times(self, user_name)
     add_user_to_blacklist(self, user_name, self.quota_supervisor.FOLLOW)
     self.quota_supervisor.add_follow()

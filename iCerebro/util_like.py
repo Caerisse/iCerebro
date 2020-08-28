@@ -37,11 +37,8 @@ def like_loop(
     likes = 0
     try:
         while likes in range(0, amount):
-            if self.aborting:
-                return interactions
-
-            if self.until_time and datetime.now() > self.until_time:
-                return interactions
+            if self.aborting or (self.until_time and datetime.now() > self.until_time):
+                break
             
             if self.jumps.check_likes():
                 self.logger.warning(
@@ -243,7 +240,7 @@ def interact_with_post(
 
         else:
             self.logger.info(
-                "Image not liked: {}\n{}".format(reason.encode("utf-8"), scope.encode("utf-8"))
+                "Image not liked: {}\n{}".format(reason, scope)
             )
             interactions.inap_img += 1
             return "inap_img", interactions
@@ -332,14 +329,14 @@ def check_post(
             image_links.append(image.get_attribute('src'))
         
         log = ""
-        log += "Post from: {}\n".format(username_text.encode("utf-8"))
-        log += "Link: {}\n".format(post_link.encode("utf-8"))
-        log += "Caption: {}\n".format(caption.encode("utf-8"))
+        log += "Post from: {}\n".format(username_text)
+        log += "Link: {}\n".format(post_link)
+        log += "Caption: {}\n".format(caption)
         for image_description in image_descriptions:
             if image_description:
-                log += "Description: {}\n".format(image_description.encode("utf-8"))
+                log += "Description: {}\n".format(image_description)
         if location_text:
-            log += "Location: {}".format(location_text.encode("utf-8"))
+            log += "Location: {}".format(location_text)
         self.logger.info(log)
                 
 
@@ -577,7 +574,7 @@ def like_comment(self, original_comment_text):
     except (NoSuchElementException, StaleElementReferenceException) as exc:
         self.logger.error(
             "Error occurred while liking a comment.\n\t{}\n\n".format(
-                str(exc).encode("utf-8")
+                str(exc)
             )
         )
         return False, "error"

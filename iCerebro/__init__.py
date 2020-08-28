@@ -87,7 +87,7 @@ class ICerebro:
         
     def update_settings(self):
         while not self.aborting:
-            # Think whats a good amount of time beetween refresh
+            # Think whats a good amount of time between refresh
             sleep(60)
             self.settings.refresh_from_db()
             if self.settings.abort:
@@ -132,14 +132,11 @@ class ICerebro:
         self.quotient_breach = False
 
         for index, tag in enumerate(tags):
-            if self.quotient_breach:
-                break
-            
-            if self.until_time and datetime.now() > self.until_time:
+            if self.aborting or self.quotient_breach or (self.until_time and datetime.now() > self.until_time):
                 break
 
             self.logger.info(
-                "Like by Tag [{}/{}]: {} - started".format(index + 1, len(tags), tag.encode("utf-8"))
+                "Like by Tag [{}/{}]: {} - started".format(index + 1, len(tags), tag)
             )
 
             tag = tag[1:] if tag[:1] == "#" else tag
@@ -182,7 +179,7 @@ class ICerebro:
 
             interactions = like_loop(self, "Tag", tag_link, amount, False)
             self.logger.info(
-                "Like by Tag [{}/{}]: {} - ended".format(index + 1, len(tags), tag.encode("utf-8"))
+                "Like by Tag [{}/{}]: {} - ended".format(index + 1, len(tags), tag)
             )
             self.logger.info(str(interactions))
             self.interactions += interactions
@@ -204,16 +201,13 @@ class ICerebro:
         self.quotient_breach = False
 
         for index, username in enumerate(usernames):
-            if self.quotient_breach:
-                break
-            
-            if self.until_time and datetime.now() > self.until_time:
+            if self.aborting or self.quotient_breach or (self.until_time and datetime.now() > self.until_time):
                 break
             
             interactions = Interactions()
             self.logger.info(
                 "Like by User [{}/{}]: {} - started".format(
-                    index + 1, len(usernames), username.encode("utf-8")
+                    index + 1, len(usernames), username
                 )
             )
             user_link = "https://www.instagram.com/{}/".format(username)
@@ -227,7 +221,7 @@ class ICerebro:
                 validation, details = nf_validate_user_call(self, username, self.quota_supervisor.LIKE)
                 if not validation:
                     self.logger.info(
-                        "{} isn't a valid user: {}".format(username.encode("utf-8"), details)
+                        "{} isn't a valid user: {}".format(username, details)
                     )
                     interactions.not_valid_users += 1
                     continue
@@ -236,7 +230,7 @@ class ICerebro:
 
             self.logger.info(
                 "Like by User [{}/{}]: {} - ended".format(
-                    index + 1, len(usernames), username.encode("utf-8")
+                    index + 1, len(usernames), username
                 )
             )
             self.logger.info(str(interactions))
@@ -286,15 +280,12 @@ class ICerebro:
         self.logger.info("Starting to follow users {}".format(follow))
 
         for index, username in enumerate(usernames):
-            if self.quotient_breach:
-                break
-            
-            if self.until_time and datetime.now() > self.until_time:
+            if self.aborting or self.quotient_breach or (self.until_time and datetime.now() > self.until_time):
                 break
             
             interactions = Interactions()
             self.logger.info("Follow User {} [{}/{}] - started".format(follow, index + 1, len(usernames)))
-            self.logger.info("--> {}".format(username.encode("utf-8")))
+            self.logger.info("--> {}".format(username))
 
             nf_go_to_user_page(self, username)
             sleep(1)
@@ -318,6 +309,9 @@ class ICerebro:
             random_chance = 50 if randomize else 100
             try:
                 while interactions.followed in range(0, actual_amount):
+                    if self.aborting or (self.until_time and datetime.now() > self.until_time):
+                        break
+
                     if self.jumps.check_follows():
                         self.logger.warning(
                             "Follow quotient reached its peak, leaving Follow User {} activity".format(
@@ -390,7 +384,6 @@ class ICerebro:
                                     follow_state, msg = follow_user(self, "profile", user_text)
                                     if follow_state is True:
                                         interactions.followed += 1
-                                        self.logger.info("Followed '{}'".format(user_text))
                                     else:
                                         self.logger.info("Not following")
                                         sleep(1)
@@ -466,10 +459,7 @@ class ICerebro:
         interactions = Interactions()
 
         for index, username in enumerate(follow_list):
-            if self.quotient_breach:
-                break
-            
-            if self.until_time and datetime.now() > self.until_time:
+            if self.aborting or self.quotient_breach or (self.until_time and datetime.now() > self.until_time):
                 break
             
             self.logger.info("Follow User [{}/{}] - started".format(index + 1, len(follow_list)))

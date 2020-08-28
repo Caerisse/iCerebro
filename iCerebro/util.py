@@ -391,7 +391,7 @@ def nf_validate_user_call(
     except NoSuchElementException:
         return False, "Unable to locate element"
     finally:
-        self.loger.debug("Storing User")
+        self.logger.debug("Storing User")
         store_user(username, followers_count, following_count, number_of_posts)
         if post_link:
             nf_find_and_press_back(self, post_link)
@@ -445,17 +445,24 @@ def get_user_data(
         base_query_1: str = JS.BASE_QUERY_1,
         base_query_2: str = JS.BASE_QUERY_2,
 ):
+    first_query = True
     try:
         try:
             data = self.browser.execute_script(base_query_1 + query)
         except WebDriverException:
+            first_query = False
             self.browser.execute_script(JS.RELOAD)
             self.quota_supervisor.add_server_call()
             data = self.browser.execute_script(base_query_2 + query)
         return data
     except JavascriptException:
         check_for_error(self)
-        self.logger.error("JavascriptException in get user data, this shouldn't happen")
+        self.logger.debug(
+            "JavascriptException in get_user_data, current url: {} trying query {}".format(
+                get_current_url(self), (base_query_1 if first_query else base_query_2) + query
+            )
+        )
+        raise WebDriverException
 
 
 # TODO: rewrite so it uses less graphql
@@ -795,13 +802,13 @@ def get_relationship_counts(self, username):
                         followers_count = format_number(top_count_elements[1].text)
                     else:
                         self.logger.info(
-                            "Failed to get followers count of '{}'".format(username.encode("utf-8"))
+                            "Failed to get followers count of '{}'".format(username)
                         )
                         followers_count = None
                 except (NoSuchElementException, StaleElementReferenceException):
                     self.logger.error(
                         "Error occurred while getting followers count "
-                        "of '{}'".format(username.encode("utf-8"))
+                        "of '{}'".format(username)
                     )
                     followers_count = None
 
@@ -824,13 +831,13 @@ def get_relationship_counts(self, username):
                         following_count = format_number(top_count_elements[2].text)
                     else:
                         self.logger.info(
-                            "Failed to get following count of '{}'".format(username.encode("utf-8"))
+                            "Failed to get following count of '{}'".format(username)
                         )
                         following_count = None
                 except (NoSuchElementException, StaleElementReferenceException):
                     self.logger.error(
                         "Error occurred while getting following count "
-                        "of '{}'".format(username.encode("utf-8"))
+                        "of '{}'".format(username)
                     )
                     following_count = None
     # TODO: update in database
