@@ -98,7 +98,8 @@ LOGGING = {
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
         'simple': {
-            '()': 'djangocolors_formatter.DjangoColorsFormatter',
+            # TODO: comment before deploying
+            # '()': 'djangocolors_formatter.DjangoColorsFormatter',
             'format': '[%(asctime)s] %(levelname)s [%(name)s] %(message)s',
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
