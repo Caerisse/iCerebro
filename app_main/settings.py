@@ -92,7 +92,8 @@ LOGGING = {
     'formatters': {
         'django.server': DEFAULT_LOGGING['formatters']['django.server'],
         'verbose': {
-            '()': 'djangocolors_formatter.DjangoColorsFormatter',
+            # TODO: comment before deploying
+            # '()': 'djangocolors_formatter.DjangoColorsFormatter',
             'format': '[%(asctime)s] %(levelname)s [%(name)s] [%(pathname)s.%(funcName)s:%(lineno)d] %(message)s',
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
@@ -145,10 +146,10 @@ LOGGING = {
     # },
     'loggers': {
         # TODO: uncomment before deploying
-        # '': {
-        #    'level': 'DEBUG',
-        #    'handlers': ['console'],
-        # },
+        '': {
+           'level': 'DEBUG',
+           'handlers': ['console'],
+        },
         'django.server': DEFAULT_LOGGING['loggers']['django.server'],
         'django.security': {
             'handlers': ['mail_admins'],

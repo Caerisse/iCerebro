@@ -69,9 +69,9 @@ def set_selenium_local_session(
     firefox_options = Firefox_Options()
 
     # TODO: remove comment before commiting to server
-    # firefox_options.add_argument("--headless")
-    # firefox_options.add_argument("--disable-gpu")
-    # firefox_options.add_argument("--no-sandbox")
+    firefox_options.add_argument("--headless")
+    firefox_options.add_argument("--disable-gpu")
+    firefox_options.add_argument("--no-sandbox")
 
     firefox_profile = webdriver.FirefoxProfile()
 
@@ -83,8 +83,8 @@ def set_selenium_local_session(
         # permissions.default.image = 2: Disable images load,
         # this setting can improve pageload & save bandwidth
         # TODO: remove comment before commiting to server
-        pass
-        # firefox_profile.set_preference("permissions.default.image", 2)
+        # pass
+        firefox_profile.set_preference("permissions.default.image", 2)
 
     # TODO: check how this could work with django
     # if self.settings.proxy_address and self.settings.proxy_port:
