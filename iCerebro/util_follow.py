@@ -1,7 +1,7 @@
 from datetime import datetime
 import random
 from time import sleep
-from typing import Union
+from typing import Union, List, Set
 from typing import Tuple
 
 from selenium.webdriver.remote.webelement import WebElement
@@ -11,13 +11,15 @@ from selenium.common.exceptions import ElementNotVisibleException
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
 from iCerebro.util_loggers import LogDecorator
-from iCerebro.navigation import nf_go_to_user_page, nf_scroll_into_view, explicit_wait
+from iCerebro.navigation import nf_go_to_user_page, nf_scroll_into_view, explicit_wait, nf_go_to_follow_page, \
+    nf_find_and_press_back
 from iCerebro.navigation import check_if_in_correct_page
-from iCerebro.navigation import nf_click_center_of_element
-from iCerebro.util import is_page_available
+from iCerebro.navigation import nf_click_center_of_element, go_to_bot_user_page
+from iCerebro.util import is_page_available, get_relationship_counts, nf_get_all_users_on_element
 from iCerebro.util import emergency_exit
 from iCerebro.util_db import add_user_to_blacklist
 from iCerebro.util_db import add_follow_times
+from app_main.models import InstaUser
 
 
 @LogDecorator()
@@ -131,7 +133,7 @@ def unfollow(
             if following_status in ["Following", "Requested"]:
                 nf_click_center_of_element(self, follow_button)
                 sleep(3)
-                confirm_unfollow(self.browser)
+                confirm_unfollow(self)
                 sleep(1)
                 following_status, follow_button = get_following_status(self, track, person)
                 if following_status in ["Follow", "Follow Back"]:
@@ -165,6 +167,8 @@ def unfollow(
 
     self.logger.info("Unfollowed '{}'".format(person))
     self.quota_supervisor.add_unfollow()
+    user, _ = InstaUser.objects.get_or_create(username=person)
+    self.instauser.remove_following(user)
     return True, "success"
 
 
@@ -228,7 +232,7 @@ def confirm_unfollow(self):
             attempt += 1
             unfollow_button = self.browser.find_element_by_xpath(XP.BUTTON_XP)
             if unfollow_button.is_displayed():
-                nf_click_center_of_element(self, unfollow_button)
+                nf_click_center_of_element(self, unfollow_button, skip_action_chain=True)
                 sleep(2)
                 break
         except (ElementNotVisibleException, NoSuchElementException) as exc:
@@ -297,7 +301,7 @@ def follow_user(
         nf_click_center_of_element(self, button)
 
     # general tasks after a successful follow
-    self.logger.info("Followed '{}".format(user_name))
+    self.logger.info("Followed {}".format(user_name))
     add_follow_times(self, user_name)
     add_user_to_blacklist(self, user_name, self.quota_supervisor.FOLLOW)
     self.quota_supervisor.add_follow()
@@ -305,15 +309,105 @@ def follow_user(
 
 
 @LogDecorator()
-def get_followers(
+def get_follow(
         self,
-        username: str
-) -> list:  # list of followers of given username
-    # TODO
-    return []
+        username: str,
+        follow: str
+) -> Set[str]:  # set of followers or following of given username
 
+    valid = {"followers", "following"}
+    if follow not in valid:
+        raise ValueError(
+            "get_follow: follow must be one of %r." % valid)
 
+    user_link = "https://www.instagram.com/{}/".format(username)
+    if not check_if_in_correct_page(self, user_link):
+        if self.username == username:
+            go_to_bot_user_page(self)
+        else:
+            nf_go_to_user_page(self, username)
 
+    if follow == 'followers':
+        query = self.instauser.followers.all()
+    else:
+        query = self.instauser.following.all()
+
+    usernames = set([instauser.username for instauser in query])
+    followers_count, following_count = get_relationship_counts(self, username)
+    count = followers_count if follow == 'followers' else following_count
+    if count == len(usernames):
+        return usernames
+
+    sleep(2)
+    nf_go_to_follow_page(self, follow, username)
+    sleep(2)
+
+    sc_rolled = 0
+    scroll_nap = 1.5
+    seen_usernames = []
+    try:
+        while True:
+            if self.aborting or (self.until_time and datetime.now() > self.until_time):
+                break
+
+            if sc_rolled > 100:
+                delay_random = random.randint(400, 600)
+                self.logger.info(
+                    "Scrolled too much, sleeping {} minutes and {} seconds".format(
+                        int(delay_random/60),
+                        delay_random % 60
+                    )
+                )
+                sleep(delay_random)
+                sc_rolled = 0
+
+            users = nf_get_all_users_on_element(self)
+            while len(users) == 0:
+                nf_find_and_press_back(self, user_link)
+                in_user_page = check_if_in_correct_page(self, user_link)
+                if not in_user_page:
+                    nf_go_to_user_page(self, username)
+                nf_go_to_follow_page(self, follow, username)
+                users = nf_get_all_users_on_element(self)
+                if len(users) == 0:
+                    delay_random = random.randint(200, 300)
+                    self.logger.info(
+                        "Soft block on see {}, "
+                        "sleeping {} minutes and {} seconds".format(
+                            follow,
+                            int(delay_random/60),
+                            delay_random % 60
+                        )
+                    )
+                    sleep(300)
+            for user in users[1:]:
+                link = user.get_attribute("href")
+                user_text = user.text
+                if user_text not in seen_usernames:
+                    seen_usernames.append(user_text)
+                    if user_text not in usernames:
+                        add_follow_times(self, user_text)
+            else:
+                # For loop ended means all users in screen have been saved
+                scrolled_to_bottom = self.browser.execute_script(JS.SCROLLED_TO_BOTTOM)
+                if scrolled_to_bottom:
+                    # already saved all possibles users
+                    break
+                # will scroll the screen a bit and grab usernames again
+                for i in range(3):
+                    self.browser.execute_script(JS.SCROLL_SCREEN)
+                    self.quota_supervisor.add_server_call()
+                    sc_rolled += 1
+                    sleep(scroll_nap)
+            if scrolled_to_bottom:
+                # already saved all possibles users
+                break
+    except Exception:
+        raise
+
+    usernames = usernames.union(set(seen_usernames))
+    self.logger.info("Grabbed {} {} names".format(len(usernames), follow))
+    return usernames
 
 
 
@@ -1041,7 +1135,7 @@ def get_followers(
 #                         "from {0}ing\n".format(action, username)
 #                     )
 #                     sleep(210)
-#                     return False, "temporary block"
+#                     return False, "temporarily blocked    "
 #
 #         logger.info("Last {} is verified after reloading the page!".format(action))
 #

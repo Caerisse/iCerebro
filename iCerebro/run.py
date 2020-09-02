@@ -27,7 +27,7 @@ def run(self):
             int(elapsed_time/3600),
             int((elapsed_time % 3600)/60),
         ))
-        self.logger.info(self.interactions)
+        self.logger.info("{}{}".format("Total " if self.interactions else "", self.interactions))
         self.settings.abort = False
         self.settings.running = False
         self.settings.save()
@@ -112,6 +112,7 @@ def run_loop(self):
             )
         else:
             self.logger.error("Unknown action in run loop")
+            break
 
         sleep_until_time_or_change(self, action_name)
 
@@ -122,6 +123,7 @@ def sleep_until_time_or_change(self, action: str):
     informed = False
     if not self.run_settings.repeat_action_if_ended_before_time and self.until_time:
         while not self.aborting:
+            self.run_settings.refresh_from_db()
             settings = self.run_settings.__dict__
             now = datetime.now()
             hour = now.hour
@@ -131,6 +133,8 @@ def sleep_until_time_or_change(self, action: str):
                     self.logger.info("Bot finished {}, will sleep until {} if no change is made, "
                                      "will check every 10 minutes if the settings changed "
                                      "or the bot was stopped".format(action, self.until_time))
-                sleep(min(600, (self.until_time-now).seconds))
+                nap = min(600, (self.until_time-now).seconds)
+                self.logger.debug("Sleeping {} seconds".format(nap))
+                sleep(nap)
             else:
                 break

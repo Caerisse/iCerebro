@@ -114,6 +114,24 @@ class Interactions:
         string = string if string != "Interactions: " else "No interactions recorded"
         return string
 
+    def __bool__(self):
+        return any([
+                self.liked_img,
+                self.already_liked,
+                self.liked_comments,
+                self.commented,
+                self.replied_to_comments,
+                self.followed,
+                self.already_followed,
+                self.unfollowed,
+                self.inap_img,
+                self.not_valid_users,
+                self.video_played,
+                self.already_Visited,
+                self.stories_watched,
+                self.reels_watched,
+                ])
+
 
 class Jumps:
     def __init__(self):

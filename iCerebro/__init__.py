@@ -20,7 +20,7 @@ from iCerebro.util import Interactions, get_active_users, format_number, nf_vali
 
 from iCerebro.util import Jumps
 from iCerebro.util_db import is_follow_restricted
-from iCerebro.util_follow import follow_user, get_followers, unfollow_loop
+from iCerebro.util_follow import follow_user, get_follow, unfollow_loop
 from iCerebro.util_like import like_loop
 from iCerebro.util_login import login_user
 from iCerebro.util_loggers import IceLogger
@@ -272,7 +272,7 @@ class ICerebro:
         if self.aborting:
             return self
 
-        valid = {"followers", "followings"}
+        valid = {"followers", "following"}
         if follow not in valid:
             raise ValueError(
                 "follow_user_follow: follow must be one of %r." % valid)
@@ -299,7 +299,7 @@ class ICerebro:
             if follow_count < amount:
                 actual_amount = follow_count
 
-            self.logger.info("About to go to {} page".format(follow))
+            self.logger.debug("About to go to {} page".format(follow))
             nf_go_to_follow_page(self, follow, username)
             sleep(2)
 
@@ -352,7 +352,7 @@ class ICerebro:
                                 )
                             )
                             sleep(300)
-                    self.logger.info("Grabbed {} usernames".format(len(users)))
+                    self.logger.debug("Grabbed {} usernames".format(len(users)))
 
                     # Interact with links instead of just storing them
                     for user in users[1:]:
@@ -492,7 +492,7 @@ class ICerebro:
             follow_state, msg = follow_user(self, "profile", username)
             if follow_state is True:
                 interactions.followed += 1
-                self.logger.info("user followed")
+                self.logger.debug("user followed")
             elif msg == "already followed":
                 interactions.already_followed += 1
 
@@ -552,11 +552,11 @@ class ICerebro:
             return self
 
         valid_lists = {"all", "iCerebro_followed"}
-        if not isinstance(unfollow_list, list) or unfollow_list not in valid_lists:
-            raise ValueError("unfollow_users: use_list must be a list or one of %r." % valid_lists)
+        if not isinstance(unfollow_list, list) and unfollow_list not in valid_lists:
+            raise ValueError("unfollow_users: use_list must be a list or one of {}. Got: {}".format(valid_lists, unfollow_list))
         valid_tracks = {"all", "nonfollowers"}
         if track not in valid_tracks:
-            raise ValueError("unfollow_users: custom_list_param must be one of %r." % valid_tracks)
+            raise ValueError("unfollow_users: custom_list_param must be one of {}. Got {}".format(valid_tracks, track))
 
         self.logger.info("Unfollow Users - started")
         go_to_bot_user_page(self)
@@ -566,13 +566,11 @@ class ICerebro:
                 self, self.username, posts_to_check, boundary_to_check
             )
 
-        following_query = self.instauser.following
-        following_list = [following.username for following in following_query]
-        following_set = set(following_list)
+        following_set = get_follow(self, self.username, 'following')
         if track == "nonfollowers":
             self.logger.info("Unfollowing only users who do not follow back")
-            followers_list = get_followers(self, self.username)
-            following_set = following_set-set(followers_list)
+            followers_set = get_follow(self, self.username, 'followers')
+            following_set = following_set-followers_set
 
         if unfollow_list == "all":
             unfollow_list = list(following_set)
@@ -580,9 +578,9 @@ class ICerebro:
             self.logger.info("Unfollowing from the users followed by iCerebro")
             if unfollow_after_hours:
                 before_date = datetime.now() - timedelta(hours=unfollow_after_hours)
-                bot_followed_query = BotFollowed.objects.filter(bot=self.username, date_lte=before_date)
+                bot_followed_query = BotFollowed.objects.filter(bot=self.instauser, date__lte=before_date)
             else:
-                bot_followed_query = BotFollowed.objects.filter(bot=self.username)
+                bot_followed_query = BotFollowed.objects.filter(bot=self.instauser)
             unfollow_list = [bot_followed.followed.username for bot_followed in bot_followed_query]
             unfollow_list = list(following_set.intersection(set(unfollow_list)))
         else:

@@ -96,7 +96,7 @@ def like_loop(
                         sleep_while_blocked(self)
                     if msg == "block on likes":
                         # TODO deal with block on likes
-                        pass
+                        raise SoftBlockedException
                     else:
                         sleep(1)
                     nf_find_and_press_back(self, base_link)
@@ -147,7 +147,7 @@ def interact_with_post(
             # try to like
             self.logger.debug("Liking post")
             sleep(1)
-            like_state, msg = like_image(self, "user_name")
+            like_state, msg = like_image(self, user_name)
 
             if like_state is True:
                 interactions.liked_img += 1

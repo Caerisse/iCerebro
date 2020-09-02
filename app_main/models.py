@@ -504,7 +504,7 @@ class BotRunSettings(models.Model):
     # Follow user that follow or are followed by users in similar account list in BotSettings
     CHOICES_WHAT = (
         ('followers', 'Followers'),
-        ('followings', 'Followings'),
+        ('following', 'Following'),
     )
     follow_user_follow_settings_what = models.CharField(choices=CHOICES_WHAT, default='followers', max_length=20)
     follow_user_follow_settings_amount = models.IntegerField(validators=[MinValueValidator(1)], default=10)

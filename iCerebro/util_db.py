@@ -112,6 +112,7 @@ def add_follow_times(
     bot_followed, created = BotFollowed.objects.get_or_create(bot=self.instauser, followed=user)
     bot_followed.times += 1
     bot_followed.save()
+    self.instauser.add_following(user)
 
 
 def is_follow_restricted(
