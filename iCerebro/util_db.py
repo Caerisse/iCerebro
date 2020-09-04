@@ -10,6 +10,8 @@ from emoji.unicode_codes import UNICODE_EMOJI
 from selenium.common.exceptions import WebDriverException, NoSuchElementException, InvalidSelectorException
 
 from app_main.models import InstaUser, BotBlacklist, BotFollowed, BotCookies, Post, Comment
+from iCerebro.navigation import check_if_in_correct_page, check_for_error, nf_scroll_into_view, \
+    nf_click_center_of_element, nf_find_and_press_back
 
 
 def store_user(
@@ -58,10 +60,6 @@ def store_post(
         }
     )
     return post
-
-
-def store_comments(self, post):
-    pass
 
 
 def add_user_to_blacklist(self, username: str, action: str):
@@ -183,66 +181,61 @@ def remove_extra_spaces(text):
     return new_text
 
 
-# def db_store_comments(
-#         self,
-#         posts: List[Post],
-#         post_link: str,
-# ):
-#     """Stores all comments of open post then goes back to post page"""
-#     comments_button = self.browser.find_elements_by_xpath(
-#             '//article//div[2]/div[1]//a[contains(@href,"comments")]'
-#     )
-#     if comments_button:
-#         try:
-#             self.logger.info("Loading comments...")
-#             comments_link = post_link + 'comments/'
-#             nf_scroll_into_view(self, comments_button[0])
-#             nf_click_center_of_element(self, comments_button[0], comments_link)
-#             sleep(1)
-#             for _ in range(9):
-#                 try:
-#                     more_comments = self.browser.find_element_by_xpath(
-#                         '//span[@aria-label="Load more comments"]'
-#                     )
-#                 except NoSuchElementException:
-#                     break
-#                 nf_scroll_into_view(self, more_comments)
-#                 self.browser.execute_script("arguments[0].click();", more_comments)
-#
-#             comments = self.browser.find_elements_by_xpath(
-#                 '/html/body/div[1]/section/main/div/ul/ul[@class="Mr508"]'
-#             )
-#             self.logger.info("Saving comments")
-#             for comment in progressbar(comments):
-#                 inner_container = comment.find_element_by_xpath(
-#                     './/div[@class="C4VMK"]'
-#                 )
-#                 username = inner_container.find_element_by_xpath('.//h3/div/a').text
-#                 text, _ = deform_emojis(inner_container.find_element_by_xpath('.//span').text)
-#                 post_date = inner_container.find_element_by_xpath(
-#                     './/time').get_attribute('datetime')
-#                 post_date = datetime.fromisoformat(post_date[:-1])
-#
-#                 user = db_get_or_create_user(self, username)
-#                 self.db.session.add(user)
-#                 self.db.session.commit()
-#
-#                 for post in posts:
-#                     comment = Comment(
-#                         date_posted=post_date,
-#                         text=text,
-#                         user=user,
-#                         post=post,
-#                     )
-#                     self.db.session.add(comment)
-#                     self.db.session.commit()
-#                     self.db.session.expunge(comment)
-#         except SQLAlchemyError:
-#             self.db.session.rollback()
-#             raise
-#         finally:
-#             self.db.session.commit()
-#             nf_find_and_press_back(self, post_link)
+def store_comments(
+        self,
+        post: Post,
+):
+    """Stores all comments of open post then goes back to post page"""
+
+    if not check_if_in_correct_page(self, post.link):
+        if not check_for_error(self):
+            self.logger.debug('Bot was not in correct page when trying to store comments')
+            return
+
+    comments_button = self.browser.find_elements_by_xpath(
+            '//article//div[2]/div[1]//a[contains(@href,"comments")]'
+    )
+
+    if comments_button:
+        try:
+            self.logger.debug("Loading comments...")
+            comments_link = post.link + 'comments/' if post.link[-1] == '/' else '/comments/'
+            nf_scroll_into_view(self, comments_button[0])
+            nf_click_center_of_element(self, comments_button[0], comments_link)
+            sleep(1)
+            for _ in range(9):
+                try:
+                    more_comments = self.browser.find_element_by_xpath(
+                        '//span[@aria-label="Load more comments"]'
+                    )
+                except NoSuchElementException:
+                    break
+                nf_scroll_into_view(self, more_comments)
+                self.browser.execute_script("arguments[0].click();", more_comments)
+
+            comments = self.browser.find_elements_by_xpath(
+                '/html/body/div[1]/section/main/div/ul/ul[@class="Mr508"]'
+            )
+            self.logger.debug("Saving comments")
+            for comment in comments:
+                inner_container = comment.find_element_by_xpath(
+                    './/div[@class="C4VMK"]'
+                )
+                username = inner_container.find_element_by_xpath('.//h3/div/a').text
+                text, _ = deform_emojis(inner_container.find_element_by_xpath('.//span').text)
+                post_date = inner_container.find_element_by_xpath(
+                    './/time').get_attribute('datetime')
+                post_date = datetime.fromisoformat(post_date[:-1])
+
+                user, _ = InstaUser.objects.get_or_create(username=username)
+                Comment.objects.get_or_create(
+                    date_posted=post_date,
+                    instauser=user,
+                    post=post,
+                    text=text,
+                )
+        finally:
+            nf_find_and_press_back(self, post.link)
 #
 #
 # def scrap_for_user_relationships(self, starting_username: str):
