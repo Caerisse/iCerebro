@@ -180,7 +180,7 @@ class BotSettings(models.Model):
 
     use_proxy = models.BooleanField(default=False)
     proxy_address = models.CharField(max_length=20, blank=True)
-    proxy_port = models.TextField(max_length=5, blank=True)
+    proxy_port = models.CharField(max_length=5, blank=True)
 
     disable_image_load = models.BooleanField(default=True)
     want_check_browser = models.BooleanField(default=False)

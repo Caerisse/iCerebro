@@ -80,19 +80,23 @@ def set_selenium_local_session(
     firefox_profile.set_preference("general.useragent.override", user_agent)
 
     if self.settings.disable_image_load:
+        pass
         # permissions.default.image = 2: Disable images load,
         # this setting can improve pageload & save bandwidth
         # TODO: remove comment before commiting to server
-        # pass
         firefox_profile.set_preference("permissions.default.image", 2)
 
-    # TODO: check how this could work with django
-    # if self.settings.proxy_address and self.settings.proxy_port:
-    #     firefox_profile.set_preference("network.proxy.type", 1)
-    #     firefox_profile.set_preference("network.proxy.http", proxy_address)
-    #     firefox_profile.set_preference("network.proxy.http_port", int(proxy_port))
-    #     firefox_profile.set_preference("network.proxy.ssl", proxy_address)
-    #     firefox_profile.set_preference("network.proxy.ssl_port", int(proxy_port))
+
+    if self.settings.use_proxy:
+        if self.settings.proxy_address and self.settings.proxy_port:
+            self.logger.debug('proxy: {}:{}'.format(self.settings.proxy_address, self.settings.proxy_port))
+            firefox_profile.set_preference("network.proxy.type", 1)
+            firefox_profile.set_preference("network.proxy.http", self.settings.proxy_address)
+            firefox_profile.set_preference("network.proxy.http_port", int(self.settings.proxy_port))
+            firefox_profile.set_preference("network.proxy.ssl", self.settings.proxy_address)
+            firefox_profile.set_preference("network.proxy.ssl_port", int(self.settings.proxy_port))
+        else:
+            self.logger.error('Bot was asked to use a proxy address but settings are missing')
 
     # mute audio while watching stories
     firefox_profile.set_preference("media.volume_scale", "0.0")
@@ -124,29 +128,29 @@ def set_selenium_local_session(
 
 
 @LogDecorator()
-def proxy_authentication(browser, logger, proxy_username, proxy_password):
+def proxy_authentication(self):
     """ Authenticate proxy using popup alert window """
 
     # FIXME: https://github.com/SeleniumHQ/selenium/issues/7239
     # this feauture is not working anymore due to the Selenium bug report above
-    logger.warn(
-        "Proxy Authentication is not working anymore due to the Selenium bug "
-        "report: https://github.com/SeleniumHQ/selenium/issues/7239"
-    )
+    # self.logger.debug(
+    #     "Proxy Authentication is not working anymore due to the Selenium bug "
+    #     "report: https://github.com/SeleniumHQ/selenium/issues/7239"
+    # )
 
     try:
         # sleep(1) is enough, sleep(2) is to make sure we
         # give time to the popup windows
         sleep(2)
-        alert_popup = browser.switch_to_alert()
+        alert_popup = self.browser.switch_to_alert()
         alert_popup.send_keys(
             "{username}{tab}{password}{tab}".format(
-                username=proxy_username, tab=Keys.TAB, password=proxy_password
+                username=self.settings.proxy_username, tab=Keys.TAB, password=self.settings.proxy_password
             )
         )
         alert_popup.accept()
     except Exception:
-        logger.warn("Unable to proxy authenticate")
+        self.logger.error("Unable to authenticate proxy")
 
 
 @LogDecorator()
