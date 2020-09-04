@@ -10,6 +10,7 @@ from emoji.unicode_codes import UNICODE_EMOJI
 from selenium.common.exceptions import WebDriverException, NoSuchElementException, InvalidSelectorException
 
 from app_main.models import InstaUser, BotBlacklist, BotFollowed, BotCookies, Post, Comment
+from iCerebro import ICerebro
 from iCerebro.navigation import check_if_in_correct_page, check_for_error, nf_scroll_into_view, \
     nf_click_center_of_element, nf_find_and_press_back
 
@@ -182,7 +183,7 @@ def remove_extra_spaces(text):
 
 
 def store_comments(
-        self,
+        self: ICerebro,
         post: Post,
 ):
     """Stores all comments of open post then goes back to post page"""
