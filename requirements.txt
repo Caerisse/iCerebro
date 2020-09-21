@@ -15,3 +15,6 @@ plyer
 regex
 PyAutoGUI
 webdriverdownloader
+djangorestframework
+django-rest-auth
+django-allauth

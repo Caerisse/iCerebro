@@ -26,9 +26,11 @@ CRISPY_TEMPLATE_PACK = "bootstrap4"
 # Application definition
 
 INSTALLED_APPS = [
+    # our apps
     "app_main",
     "app_db_logger",
     "app_web",
+    # django
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -36,6 +38,15 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_fsm_log",
+    # rest
+    'django.contrib.sites',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'rest_auth',
+    'allauth',
+    'allauth.account',
+    'rest_auth.registration',
+    # others
     "subscriptions.apps.SubscriptionsConfig",
     'multiselectfield',
     "crispy_forms",
@@ -147,10 +158,10 @@ LOGGING = {
     # },
     'loggers': {
         # TODO: uncomment before deploying
-        '': {
-           'level': 'DEBUG',
-           'handlers': ['console'],
-        },
+        # '': {
+        #    'level': 'DEBUG',
+        #    'handlers': ['console'],
+        # },
         'django.server': DEFAULT_LOGGING['loggers']['django.server'],
         'django.security': {
             'handlers': ['mail_admins'],
@@ -211,6 +222,19 @@ USE_L10N = True
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATIC_URL = "/static/"
 
+# Rest
+
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        # Comment to restrict access only to mobile devices with auth tokens
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+}
+
 django_heroku.settings(locals(), logging=False)
 
 """ 
@@ -241,4 +265,3 @@ CELERYBEAT_SCHEDULE = {
     },
 }
  """
-

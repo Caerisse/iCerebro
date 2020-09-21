@@ -68,10 +68,10 @@ def set_selenium_local_session(
 
     firefox_options = Firefox_Options()
 
-    # TODO: remove comment before commiting to server
-    firefox_options.add_argument("--headless")
-    firefox_options.add_argument("--disable-gpu")
-    firefox_options.add_argument("--no-sandbox")
+    if not self.settings.disable_image_load:
+        firefox_options.add_argument("--headless")
+        firefox_options.add_argument("--disable-gpu")
+        firefox_options.add_argument("--no-sandbox")
 
     firefox_profile = webdriver.FirefoxProfile()
 
@@ -80,12 +80,9 @@ def set_selenium_local_session(
     firefox_profile.set_preference("general.useragent.override", user_agent)
 
     if self.settings.disable_image_load:
-        pass
         # permissions.default.image = 2: Disable images load,
-        # this setting can improve pageload & save bandwidth
-        # TODO: remove comment before commiting to server
+        # this setting can improve page load time & save bandwidth
         firefox_profile.set_preference("permissions.default.image", 2)
-
 
     if self.settings.use_proxy:
         if self.settings.proxy_address and self.settings.proxy_port:

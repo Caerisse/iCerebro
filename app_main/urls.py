@@ -4,11 +4,15 @@ from django.contrib import admin
 admin.autodiscover()
 
 import app_web.views
+from rest_framework.authtoken.views import obtain_auth_token
 
 urlpatterns = [
     path("", app_web.views.index, name="index"),
     path("admin/", admin.site.urls),
     path('accounts/', include('django.contrib.auth.urls')),
+    path('auth/', include('rest_auth.urls')),
+    path('auth/registration/', include('rest_auth.registration.urls')),
+    path('auth/token', obtain_auth_token),
     path("subscriptions/",
          app_web.views.subscriptions, name="subscriptions"),
     path("accounts/register/",

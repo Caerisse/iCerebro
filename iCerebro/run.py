@@ -4,6 +4,7 @@ from time import sleep, perf_counter
 from iCerebro.browser import set_selenium_local_session, close_browser
 from iCerebro.util import interruption_handler
 from iCerebro.util_loggers import LogDecorator
+from iCerebro.navigation import web_address_navigator
 
 
 @LogDecorator()
@@ -13,6 +14,9 @@ def run(self):
         # self.display = Display(visible=0, size=(800, 600))
         # self.display.start()
         self.browser = set_selenium_local_session(self)
+        # web_address_navigator(self, 'http://www.google.com')
+        # search = self.browser.find_element_by_xpath(self, '/html/body/div/div[2]/form/div[2]/div[1]/div[1]/div/div[2]/input')
+        # sleep(60)
         self.login()
         # self.like_by_tags(random.sample(self.settings.hashtags, 3), 5)
         # self.like_by_feed(10)
