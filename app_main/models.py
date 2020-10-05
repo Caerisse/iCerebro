@@ -179,9 +179,6 @@ class BotSettings(models.Model):
     page_delay = models.IntegerField(default=5, validators=[MinValueValidator(0)])
 
     use_proxy = models.BooleanField(default=False)
-    proxy_address = models.CharField(max_length=20, blank=True)
-    proxy_port = models.CharField(max_length=5, blank=True)
-
     disable_image_load = models.BooleanField(default=True)
     want_check_browser = models.BooleanField(default=False)
 

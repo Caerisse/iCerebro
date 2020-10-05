@@ -225,7 +225,6 @@ def bot_statics(request, username):
 
 
 @api_view(["POST"])
-@renderer_classes([JSONRenderer])
 @permission_classes([IsAuthenticated])
 @login_required
 def save_user_pub_key(request):
@@ -241,23 +240,26 @@ def save_user_pub_key(request):
             or len(request.data["key"].split(" ")) < 2
             or request.data["key"].split(" ")[0] != "ssh-rsa"
     ):
-        return Response({"error": "Provided key is not appropiate. Key: " + request.data["key"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Provided key is not appropriate. Key: " + request.data["key"]}, status=status.HTTP_400_BAD_REQUEST)
 
     provided_key = request.data["key"].rstrip('\n')
     authorized_keys_path = os.getenv("HOME") + "/.ssh/authorized_keys"
     authorized_keys = open(authorized_keys_path, "a+")
-    for line in authorized_keys:
-        key = line.rstrip('\n')
-        if key == provided_key:
-            break
-    else:
-        authorized_keys.write(provided_key + "\n")
-    authorized_keys.close()
+    authorized_keys.seek(0)
+    try:
+        for line in authorized_keys:
+            key = line.rstrip('\n')
+            if key == provided_key:
+                break
+        else:
+            authorized_keys.write(provided_key + "\n")
+            print("Saved new ssh key")
+    finally:
+        authorized_keys.close()
     return Response({}, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
-@renderer_classes([JSONRenderer])
 @permission_classes([IsAuthenticated])
 @login_required
 def get_proxy_port(request, try_n=0):
@@ -267,10 +269,10 @@ def get_proxy_port(request, try_n=0):
         raise Http404("User does not exist")
 
     # Local ip for testing
-    ip = '192.168.1.101'
+    # ip = '192.168.1.101'
 
     # Public IP
-    # ip = get('https://api.ipify.org').text
+    ip = get('https://api.ipify.org').text
 
     port = 0
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
