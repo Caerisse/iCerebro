@@ -35,6 +35,7 @@ def run(self):
         self.settings.abort = False
         self.settings.running = False
         self.settings.save()
+        self.proxy.delete()
 
 
 @LogDecorator()

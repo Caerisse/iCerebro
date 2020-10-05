@@ -1,5 +1,6 @@
 import logging
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError
 from django.http import Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -170,6 +171,8 @@ def bot_run(request, username):
                 raise Http404("No bot run settings for bot with username {}".format(username))
             running_with = BotSettings.objects.get(pk=request.POST['settings_name'])
             iCerebro = ICerebro(running_with, bot_run_settings)
+            if not iCerebro.proxy:
+                pass  # TODO: raise error
             iCerebro.start()
     return render(request, 'bot_run.html',
                   {

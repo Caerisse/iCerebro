@@ -84,16 +84,22 @@ def set_selenium_local_session(
         # this setting can improve page load time & save bandwidth
         firefox_profile.set_preference("permissions.default.image", 2)
 
-    if self.settings.use_proxy:
-        if self.settings.proxy_address and self.settings.proxy_port:
-            self.logger.debug('proxy: {}:{}'.format(self.settings.proxy_address, self.settings.proxy_port))
-            firefox_profile.set_preference("network.proxy.type", 1)
-            firefox_profile.set_preference("network.proxy.http", self.settings.proxy_address)
-            firefox_profile.set_preference("network.proxy.http_port", int(self.settings.proxy_port))
-            firefox_profile.set_preference("network.proxy.ssl", self.settings.proxy_address)
-            firefox_profile.set_preference("network.proxy.ssl_port", int(self.settings.proxy_port))
-        else:
-            self.logger.error('Bot was asked to use a proxy address but settings are missing')
+    # if self.settings.use_proxy:
+    #     if self.settings.proxy_address and self.settings.proxy_port:
+    #         self.logger.debug('proxy: {}:{}'.format(self.settings.proxy_address, self.settings.proxy_port))
+    #         firefox_profile.set_preference("network.proxy.type", 1)
+    #         firefox_profile.set_preference("network.proxy.http", self.settings.proxy_address)
+    #         firefox_profile.set_preference("network.proxy.http_port", int(self.settings.proxy_port))
+    #         firefox_profile.set_preference("network.proxy.ssl", self.settings.proxy_address)
+    #         firefox_profile.set_preference("network.proxy.ssl_port", int(self.settings.proxy_port))
+    #     else:
+    #         self.logger.error('Bot was asked to use a proxy address but settings are missing')
+
+    firefox_profile.set_preference("network.proxy.type", 1)
+    firefox_profile.set_preference("network.proxy.http", "localhost")
+    firefox_profile.set_preference("network.proxy.http_port", self.proxy.port)
+    firefox_profile.set_preference("network.proxy.ssl", "localhost")
+    firefox_profile.set_preference("network.proxy.ssl_port", self.proxy.port)
 
     # mute audio while watching stories
     firefox_profile.set_preference("media.volume_scale", "0.0")

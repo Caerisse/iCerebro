@@ -38,14 +38,17 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_fsm_log",
+    # allauth
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
     # rest
     'django.contrib.sites',
     'rest_framework',
     'rest_framework.authtoken',
-    'rest_auth',
-    'allauth',
-    'allauth.account',
-    'rest_auth.registration',
+    # rest auth
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
     # others
     "subscriptions.apps.SubscriptionsConfig",
     'multiselectfield',
@@ -234,6 +237,8 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
+
+SITE_ID = 1
 
 django_heroku.settings(locals(), logging=False)
 

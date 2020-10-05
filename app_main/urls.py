@@ -1,18 +1,18 @@
 from django.urls import path, include
 from django.contrib import admin
-
-admin.autodiscover()
+from rest_framework.authtoken.views import obtain_auth_token
 
 import app_web.views
-from rest_framework.authtoken.views import obtain_auth_token
+
+admin.autodiscover()
 
 urlpatterns = [
     path("", app_web.views.index, name="index"),
     path("admin/", admin.site.urls),
     path('accounts/', include('django.contrib.auth.urls')),
-    path('auth/', include('rest_auth.urls')),
-    path('auth/registration/', include('rest_auth.registration.urls')),
-    path('auth/token', obtain_auth_token),
+    path('rest-auth/token', obtain_auth_token),
+    path("rest-auth/", include("dj_rest_auth.urls")),
+    path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
     path("subscriptions/",
          app_web.views.subscriptions, name="subscriptions"),
     path("accounts/register/",

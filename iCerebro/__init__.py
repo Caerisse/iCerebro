@@ -4,10 +4,11 @@ from datetime import datetime, timedelta
 from time import sleep
 from typing import List, Union
 
+from django.core.exceptions import ObjectDoesNotExist
 from pyvirtualdisplay import Display
 from selenium.common.exceptions import WebDriverException, NoSuchElementException
 
-from app_main.models import BotSettings, BotFollowed, BotRunSettings
+from app_main.models import BotSettings, BotFollowed, BotRunSettings, ProxyAddress
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
 from iCerebro.navigation import nf_go_to_tag_page, check_if_in_correct_page, nf_go_from_post_to_profile, \
@@ -40,6 +41,11 @@ class ICerebro:
         self.run_settings = run_settings
         self.instauser = self.settings.instauser
         self.username = self.settings.instauser.username
+
+        try:
+            self.proxy = ProxyAddress.objects.get(user=self.settings.icerebrouser)
+        except ObjectDoesNotExist:
+            self.proxy = None
 
         # TODO: replace logger with custom class to always add the extra parameter
         self.logger = IceLogger(username=self.username)
