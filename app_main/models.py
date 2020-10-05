@@ -551,3 +551,20 @@ class BotRunSettings(models.Model):
 
     class Meta:
         db_table = "bot_run_settings"
+
+
+class ProxyAddress(models.Model):
+    objects = models.Manager()
+
+    user = models.OneToOneField(ICerebroUser, on_delete=models.CASCADE, related_name="proxy")
+    first_reserved = models.DateTimeField(auto_now_add=True)
+    last_used = models.DateTimeField(auto_now=True)
+    host = models.CharField(max_length=15)
+    port = models.IntegerField(validators=[MinValueValidator(1024), MaxValueValidator(65535)])
+
+    def __str__(self):
+        return "{}@{}:{}".format(self.user.user.username, self.host, self.port)
+
+    class Meta:
+        unique_together = ('host', 'port')
+        db_table = "proxy_address"

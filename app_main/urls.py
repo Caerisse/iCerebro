@@ -36,4 +36,8 @@ urlpatterns = [
          app_web.views.get_latest_logs, name="bot_run"),
     path("bot/statics/<str:username>/",
          app_web.views.bot_statics, name="bot_statics"),
+    path("proxy/pubkey/",
+         app_web.views.save_user_pub_key, name="save_user_pub_key"),
+    path("proxy/address/",
+         app_web.views.get_proxy_port, name="get_proxy_port"),
 ]

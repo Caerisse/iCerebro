@@ -1,9 +1,21 @@
 import logging
+import os
+import socket
+from contextlib import closing
+from requests import get
+
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.http import Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+
+from rest_framework import status
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.decorators import api_view, renderer_classes, permission_classes, authentication_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
+from rest_framework.response import Response
 
 from app_db_logger.models import StatusLog
 from app_main.models import *
@@ -210,3 +222,72 @@ def bot_statics(request, username):
     except ObjectDoesNotExist:
         raise Http404("Bot does not exist")
     return render(request, 'bot_statics.html', {'bot_account': bot_account})
+
+
+@api_view(["POST"])
+@renderer_classes([JSONRenderer])
+@permission_classes([IsAuthenticated])
+@login_required
+def save_user_pub_key(request):
+    if request.method != 'POST':
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    try:
+        user = ICerebroUser.objects.get(user=request.user)
+    except ObjectDoesNotExist:
+        return Response({"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+    if (
+            not request.data["key"]
+            or len(request.data["key"].split(" ")) < 2
+            or request.data["key"].split(" ")[0] != "ssh-rsa"
+    ):
+        return Response({"error": "Provided key is not appropiate. Key: " + request.data["key"]}, status=status.HTTP_400_BAD_REQUEST)
+
+    provided_key = request.data["key"].rstrip('\n')
+    authorized_keys_path = os.getenv("HOME") + "/.ssh/authorized_keys"
+    authorized_keys = open(authorized_keys_path, "a+")
+    for line in authorized_keys:
+        key = line.rstrip('\n')
+        if key == provided_key:
+            break
+    else:
+        authorized_keys.write(provided_key + "\n")
+    authorized_keys.close()
+    return Response({}, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@renderer_classes([JSONRenderer])
+@permission_classes([IsAuthenticated])
+@login_required
+def get_proxy_port(request, try_n=0):
+    try:
+        user = ICerebroUser.objects.get(user=request.user)
+    except ObjectDoesNotExist:
+        raise Http404("User does not exist")
+
+    # Local ip for testing
+    ip = '192.168.1.101'
+
+    # Public IP
+    # ip = get('https://api.ipify.org').text
+
+    port = 0
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(('localhost', 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        port = s.getsockname()[1]
+
+    try:
+        proxy_address, created = ProxyAddress.objects.get_or_create(
+            user=user,
+            defaults={
+                "host": ip,
+                "port": port,
+            }
+        )
+        return Response({"host": proxy_address.host, "port": proxy_address.port}, status.HTTP_200_OK)
+    except IntegrityError:
+        if try_n > 4:
+            return Response({"error": "No free ports found, try again later"}, status.HTTP_503_SERVICE_UNAVAILABLE)
+        get_proxy_port(request, try_n + 1)
