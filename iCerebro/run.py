@@ -14,6 +14,8 @@ def run(self):
         # self.display = Display(visible=0, size=(800, 600))
         # self.display.start()
         self.browser = set_selenium_local_session(self)
+        if not self.browser:
+            return
         # web_address_navigator(self, 'http://www.google.com')
         # search = self.browser.find_element_by_xpath(self, '/html/body/div/div[2]/form/div[2]/div[1]/div[1]/div/div[2]/input')
         # sleep(60)
@@ -35,7 +37,8 @@ def run(self):
         self.settings.abort = False
         self.settings.running = False
         self.settings.save()
-        self.proxy.delete()
+        if self.proxy:
+            self.proxy.delete()
 
 
 @LogDecorator()

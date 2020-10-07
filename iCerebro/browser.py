@@ -1,9 +1,11 @@
+import platform
+
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
 from selenium.webdriver.firefox.options import Options as Firefox_Options
 from selenium.webdriver import Remote
-from webdriverdownloader import GeckoDriverDownloader
 
 import os
 import zipfile
@@ -16,35 +18,45 @@ from iCerebro.util_loggers import LogDecorator
 
 
 @LogDecorator()
-def use_assets():
-    # TODO: change as appropriate to server
-    return os.getcwd()
-
-
-@LogDecorator()
 def get_geckodriver():
     # prefer using geckodriver from path
     gecko_path = os.environ.get('GECKODRIVER_PATH')
     if gecko_path:
         return gecko_path
-    if os.path.isfile('./geckodriver'):
-        return './geckodriver'
+    # if not in path try to find it with shutil
     gecko_path = shutil.which("geckodriver") or shutil.which("geckodriver.exe")
     if gecko_path:
         return gecko_path
+    # if neither use local file according to OS
+    system_name = platform.system()
+    gecko_path = './geckodriver/{}/geckodriver{}'.format(system_name, '.exe' if system_name == 'Windows' else '')
+    if os.path.isfile(gecko_path):
+        return gecko_path
 
-    asset_path = use_assets()
-    gdd = GeckoDriverDownloader(asset_path, asset_path)
-    # skips download if already downloaded
-    bin_path, sym_path = gdd.download_and_install()
-    return sym_path
+    # Disclaimer:
+    #   All provided geckodriver are for 64 bits machines
+    #   others can be dosloaded from here https://github.com/mozilla/geckodriver/releases
+    #   From geckodriver github:
+    #       Known problems
+    #       macOS 10.15 (Catalina):
+    #       Due to the requirement from Apple that all programs must be notarized, geckodriver will not work on Catalina
+    #       if you manually download it through another notarized program, such as Firefox.
+    #       Whilst we are working on a repackaging fix for this problem, you can find more details on how to work around
+    #       this issue in the macOS notarization section of the documentation.
+    #   https://firefox-source-docs.mozilla.org/testing/geckodriver/Notarization.html
+    #   From that link:
+    #       To bypass the notarization requirement on macOS if you have downloaded the geckodriver .tar.gz
+    #       via a web browser, you can run the following command in a terminal:
+    #           xattr -r -d com.apple.quarantine geckodriver
+    #   For iCerebro if executing from the root of the project the command would be:
+    #       xattr -r -d com.apple.quarantine geckodriver/Darwin/geckodriver
 
 
 @LogDecorator()
 def create_firefox_extension():
     ext_path = os.path.abspath(os.path.dirname(__file__) + sep + "firefox_extension")
     # safe into assets folder
-    zip_file = use_assets() + sep + "extension.xpi"
+    zip_file = ext_path + sep + "extension.xpi"
 
     files = ["manifest.json", "content.js", "arrive.js"]
     with zipfile.ZipFile(zip_file, "w", zipfile.ZIP_DEFLATED, False) as zipf:
@@ -81,18 +93,40 @@ def set_selenium_local_session(
     firefox_profile.set_preference("intl.accept_languages", "en-US")
     firefox_profile.set_preference("general.useragent.override", user_agent)
 
-    if self.settings.use_proxy:
+    if self.proxy:
+        self.logger.debug("Using android app proxy on port {}".format(self.proxy.port))
         firefox_profile.set_preference("network.proxy.type", 1)
         firefox_profile.set_preference("network.proxy.http", "localhost")
         firefox_profile.set_preference("network.proxy.http_port", self.proxy.port)
         firefox_profile.set_preference("network.proxy.ssl", "localhost")
         firefox_profile.set_preference("network.proxy.ssl_port", self.proxy.port)
 
+        # TODO, test if connection is active in provided port, return None if not
+    elif self.settings.use_proxy:
+        if self.settings.proxy_address and self.settings.proxy_port:
+            self.logger.debug('Using provided proxy: {}:{}'.format(self.settings.proxy_address, self.settings.proxy_port))
+            firefox_profile.set_preference("network.proxy.type", 1)
+            firefox_profile.set_preference("network.proxy.http", self.settings.proxy_address)
+            firefox_profile.set_preference("network.proxy.http_port", int(self.settings.proxy_port))
+            firefox_profile.set_preference("network.proxy.ssl", self.settings.proxy_address)
+            firefox_profile.set_preference("network.proxy.ssl_port", int(self.settings.proxy_port))
+        else:
+            self.logger.error('Bot was asked to use a proxy address but settings are missing')
+            return None
+    else:
+        self.logger.error('No proxy set, please run the iCerebro android app or provide a proxy address to use')
+        # Commented for testing purpose (so it can be run without a proxy using the server ip)
+        # return None
+        self.logger.info('Running without proxy for testing purposes')
+
     # mute audio while watching stories
     firefox_profile.set_preference("media.volume_scale", "0.0")
 
     driver_path = get_geckodriver()
-    firefox_bin = os.environ.get('FIREFOX_BIN')
+    firefox_path = os.environ.get('FIREFOX_BIN')
+    if not firefox_path:
+        firefox_path = shutil.which("firefox") or shutil.which("firefox.exe")
+    firefox_bin = FirefoxBinary(firefox_path)
     browser = webdriver.Firefox(
         firefox_binary=firefox_bin,
         firefox_profile=firefox_profile,
@@ -151,7 +185,7 @@ def close_browser(browser, threaded_session, logger):
             browser.delete_all_cookies()
         except Exception as exc:
             if isinstance(exc, WebDriverException):
-                logger.exception(
+                logger.error(
                     "Error occurred while deleting cookies "
                     "from web browser!\n\t{}".format(str(exc).encode("utf-8"))
                 )
@@ -161,7 +195,7 @@ def close_browser(browser, threaded_session, logger):
             browser.quit()
         except Exception as exc:
             if isinstance(exc, WebDriverException):
-                logger.exception(
+                logger.error(
                     "Error occurred while "
                     "closing web browser!\n\t{}".format(str(exc).encode("utf-8"))
                 )
