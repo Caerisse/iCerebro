@@ -1,7 +1,7 @@
 from time import sleep
 
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, WebDriverException, \
-    TimeoutException, MoveTargetOutOfBoundsException
+    TimeoutException, MoveTargetOutOfBoundsException, ElementClickInterceptedException
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -56,6 +56,8 @@ def get_current_url(self):
 def web_address_navigator(self, link):
     """Checks and compares current URL of web page and the URL to be
     navigated and if it is different, it does navigate"""
+    if link is None:
+        return
     current_url = get_current_url(self)
     total_timeouts = 0
     page_type = None  # file or directory
@@ -101,8 +103,11 @@ def check_if_in_correct_page(
 ):
     current_url = get_current_url(self)
 
-    if current_url is None or desired_link is None:
+    if current_url is None:
         return False
+
+    if desired_link is None:
+        return True
 
     # remove slashes at the end to compare efficiently
     if current_url.endswith("/"):
@@ -234,14 +239,17 @@ def nf_click_center_of_element(
             if try_n <= 3:
                 self.browser.execute_script(JS.RELOAD)
                 self.quota_supervisor.add_server_call()
-                nf_click_center_of_element(self, element,desired_link, disable_navigation, skip_action_chain, try_n + 1)
+                nf_click_center_of_element(self, element, desired_link, disable_navigation, skip_action_chain, try_n + 1)
     if desired_link or skip_action_chain:
         try:
             explicit_wait(self, "PFL", [], 7, False)
             if skip_action_chain or not check_if_in_correct_page(self, desired_link):
-                element.click()
-                self.quota_supervisor.add_server_call()
-                explicit_wait(self, "PFL", [], 7, False)
+                try:
+                    element.click()
+                    self.quota_supervisor.add_server_call()
+                    explicit_wait(self, "PFL", [], 7, False)
+                except ElementClickInterceptedException:
+                    pass
             if not check_if_in_correct_page(self, desired_link):
                 self.browser.execute_script("arguments[0].click();", element)
                 self.quota_supervisor.add_server_call()
@@ -254,7 +262,7 @@ def nf_click_center_of_element(
         except StaleElementReferenceException:
             pass
     else:
-        sleep(7)
+        sleep(2)
 
 
 @LogDecorator()

@@ -269,10 +269,10 @@ def get_proxy_port(request, try_n=0):
         raise Http404("User does not exist")
 
     # Local ip for testing
-    # ip = '192.168.1.101'
+    ip = '192.168.1.101'
 
     # Public IP
-    ip = get('https://api.ipify.org').text
+    #ip = get('https://api.ipify.org').text
 
     port = 0
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:

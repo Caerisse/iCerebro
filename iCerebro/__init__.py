@@ -29,7 +29,6 @@ from iCerebro.run import run
 
 
 class ICerebro:
-
     def __init__(
             self,
             settings: BotSettings,
@@ -183,7 +182,12 @@ class ICerebro:
 
             sleep(1)
 
-            interactions = like_loop(self, "Tag", tag_link, amount, False)
+            interactions = like_loop(
+                self,
+                "Tag [{}/{}]: {}".format(index + 1, len(tags), tag),
+                tag_link,
+                amount,
+                False)
             self.logger.info(
                 "Like by Tag [{}/{}]: {} - ended".format(index + 1, len(tags), tag)
             )
@@ -232,7 +236,13 @@ class ICerebro:
                     interactions.not_valid_users += 1
                     continue
 
-            interactions += like_loop(self, "User", user_link, amount, True)
+            interactions += like_loop(
+                self,
+                "User [{}/{}]: {}".format(index + 1, len(usernames), username),
+                user_link,
+                amount,
+                True
+            )
 
             self.logger.info(
                 "Like by User [{}/{}]: {} - ended".format(
@@ -373,7 +383,7 @@ class ICerebro:
                                     actual_amount
                                 )
                                 )
-                                self.logger.info("Trying user {}".format(user_text.encode("utf-8")))
+                                self.logger.info("Trying user {}".format(user_text))
                                 nf_scroll_into_view(self, user)
                                 sleep(1)
                                 nf_click_center_of_element(self, user, user_link2)
@@ -394,16 +404,15 @@ class ICerebro:
                                         self.logger.info("Not following")
                                         sleep(1)
                                     if random.randint(0, 100) <= self.settings.user_interact_percentage:
-                                        self.logger.info(
-                                            "Going to interact with user '{}'".format(
-                                                user_text
-                                            )
-                                        )
-                                        # disable re-validating user in like_by_users
-                                        self.like_by_users(
-                                            [user_text],
-                                            None,
-                                            True,
+                                        self.logger.info("Interacting with user '{}'".format(user_text))
+                                        if not check_if_in_correct_page(self, user_link2):
+                                            nf_go_from_post_to_profile(self, user_text)
+                                        interactions += like_loop(
+                                            self,
+                                            "Interact with user '{}'".format(user_text),
+                                            user_link2,
+                                            self.settings.user_interact_amount,
+                                            True
                                         )
                                 else:
                                     interactions.not_valid_users += 1

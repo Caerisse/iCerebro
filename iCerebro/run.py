@@ -1,28 +1,38 @@
 import random
 from datetime import datetime, timedelta
 from time import sleep, perf_counter
-from iCerebro.browser import set_selenium_local_session, close_browser
+from iCerebro.browser import set_selenium_local_session_firefox, close_browser, set_selenium_local_session_chrome
 from iCerebro.util import interruption_handler
 from iCerebro.util_loggers import LogDecorator
-from iCerebro.navigation import web_address_navigator
 
 
 @LogDecorator()
 def run(self):
     start_time = perf_counter()
     try:
-        # self.display = Display(visible=0, size=(800, 600))
-        # self.display.start()
-        self.browser = set_selenium_local_session(self)
+        # self.browser = set_selenium_local_session_firefox(self)
+        self.browser = set_selenium_local_session_chrome(self)
         if not self.browser:
             return
-        # web_address_navigator(self, 'http://www.google.com')
-        # search = self.browser.find_element_by_xpath(self, '/html/body/div/div[2]/form/div[2]/div[1]/div[1]/div/div[2]/input')
-        # sleep(60)
         self.login()
-        # self.like_by_tags(random.sample(self.settings.hashtags, 3), 5)
-        # self.like_by_feed(10)
         run_loop(self)
+
+        # Test all coded actions
+        # self.like_by_tags(random.sample(self.settings.hashtags, 2), 2)
+        # self.like_by_users(random.sample(self.run_settings.like_by_users_settings_usernames, 2), 3, True)
+        # self.like_by_feed(5)
+        # self.follow_user_follow('followers', random.sample(self.settings.similar_accounts, 2), 2, True)
+        # self.follow_by_list(random.sample(self.run_settings.follow_by_list_settings_usernames, 5), True)
+        # self.unfollow_users(
+        #     4,
+        #     self.run_settings.unfollow_users_settings_list,
+        #     self.run_settings.unfollow_users_settings_track,
+        #     self.run_settings.unfollow_users_settings_after_hours,
+        #     False,  # self.run_settings.unfollow_users_settings_dont_unfollow_active_users,
+        #     self.run_settings.unfollow_users_settings_posts_to_check,
+        #     self.run_settings.unfollow_users_settings_boundary_to_check
+        # )
+
     finally:
         close_browser(self.browser, True, self.logger)
         if self.display:

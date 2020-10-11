@@ -203,7 +203,6 @@ def interact_with_post(
                     follow_state, msg = follow_user(self, "post", user_name, None)
                     if follow_state is True:
                         interactions.followed += 1
-                        self.logger.info("Followed user")
                     elif msg == "already followed":
                         interactions.already_followed += 1
                 else:
@@ -219,7 +218,7 @@ def interact_with_post(
                         nf_go_from_post_to_profile(self, user_name)
                     interactions += like_loop(
                         self,
-                        "User",
+                        "Interact with user '{}'".format(user_name),
                         user_link,
                         self.settings.user_interact_amount,
                         True
@@ -452,7 +451,7 @@ def check_post(
         post = store_post(post_link, username_text, post_date, image_links,
                           caption, likes_count, image_descriptions)
         self.logger.debug("Storing Comments")
-        store_comments(self, post)
+        # store_comments(self, post)
         elapsed_time = perf_counter() - t
         self.logger.info("Check post elapsed time: {:.0f} seconds".format(elapsed_time))
 

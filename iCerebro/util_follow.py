@@ -271,7 +271,7 @@ def follow_user(
             following_status, follow_button = get_following_status(self, track, user_name)
             if following_status in ["Follow", "Follow Back"]:
                 nf_scroll_into_view(self, follow_button)
-                nf_click_center_of_element(self, follow_button)
+                nf_click_center_of_element(self, follow_button, skip_action_chain=True)
                 sleep(3)
                 following_status, follow_button = get_following_status(self, track, user_name)
                 if following_status in ["Following", "Requested"]:

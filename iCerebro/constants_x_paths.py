@@ -20,6 +20,15 @@ DISMISS_ELEM = "//*[contains(text(), 'Not Now')]"
 # dismiss_notification_offer
 OFFER_ELEM_LOC = "//div/h2[text()='Turn on Notifications']"
 DISMISS_ELEM_LOC = "//button[text()='Not Now']"
+# dismiss_add_to_home_offer
+OFFER_ELEM_HOME = "//div/h2[text()='Add Instagram to your Home screen?']"
+DISMISS_ELEM_HOME = "//button[text()='Cancel']"
+# dismiss_use_app_banner
+OFFER_ELEM_USE = "//*[contains(text(), 'Use the App')]"
+DISMISS_ELEM_USE = "//button/span[contains(@aria-label, 'Close')]"
+# dismiss_use_app_banner
+OFFER_ELEM_LOGIN = "//*[contains(text(), 'Save Your Login Info?')]"
+DISMISS_ELEM_LOGIN = "//button[text()='Not Now']"
 # extract_information
 CLOSE_OVERLAY = "//div/div[@role='dialog']"
 ONE_PIC_ELEM = "//section/main/article/div[1]/div/div[10]/div[3]/a/div"

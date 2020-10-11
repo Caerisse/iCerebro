@@ -10,12 +10,14 @@ from selenium.common.exceptions import MoveTargetOutOfBoundsException
 
 import iCerebro.constants_x_paths as XP
 import iCerebro.constants_js_scripts as JS
-from iCerebro.navigation import web_address_navigator, explicit_wait, SoftBlockedException
+from iCerebro.navigation import web_address_navigator, explicit_wait, SoftBlockedException, nf_go_to_home
 from iCerebro.navigation import nf_click_center_of_element
 from iCerebro.util import check_authorization, sleep_while_blocked
 from iCerebro.util_db import get_cookies, save_cookies
+from util_loggers import LogDecorator
 
 
+@LogDecorator()
 def bypass_suspicious_login(
         self
 ) -> bool:  # success
@@ -91,6 +93,7 @@ def bypass_suspicious_login(
     return True
 
 
+@LogDecorator()
 def check_browser(self) -> bool:  # success
     # check connection status
     try:
@@ -154,6 +157,7 @@ def check_browser(self) -> bool:  # success
     return True
 
 
+@LogDecorator()
 def login_user(
     self
 ) -> bool:  # success
@@ -181,13 +185,13 @@ def login_user(
         self.browser.execute_script(JS.RELOAD)
         self.quota_supervisor.add_server_call()
         # cookie has been loaded, so the user should be logged in
+        dismiss_popups(self)
         try:
             login_state = check_authorization(self, "activity counts", False)
         except SoftBlockedException:
             sleep_while_blocked(self)
             login_state = check_authorization(self, "activity counts", False)
         if login_state is True:
-            dismiss_notification_offer(self)
             return True
         else:
             self.logger.warning("There is a issue with the saved cookie, will create a new one")
@@ -261,8 +265,7 @@ def login_user(
         self.quota_supervisor.add_server_call()
 
     sleep(1)
-    dismiss_get_app_offer(self)
-    dismiss_notification_offer(self)
+    dismiss_popups(self)
 
     # check for login error messages and display it in the logs
     if "instagram.com/challenge" in self.browser.current_url:
@@ -319,13 +322,26 @@ def login_user(
         return False
 
 
+@LogDecorator()
+def dismiss_popups(self):
+    dismiss_save_login_offer(self)
+    dismiss_home_screen_offer(self)
+    self.browser.execute_script(JS.RELOAD)
+    self.quota_supervisor.add_server_call()
+    dismiss_get_app_offer(self)
+    self.browser.execute_script(JS.RELOAD)
+    self.quota_supervisor.add_server_call()
+    dismiss_notification_offer(self)
+    dismiss_use_app_offer(self)
+
+
 def dismiss_get_app_offer(self):
     """ Dismiss 'Get the Instagram App' page after a fresh login """
     # wait a bit and see if the 'Get App' offer rises up
     offer_loaded = explicit_wait(self, "VOEL", [XP.OFFER_ELEM, "XPath"], 5, False)
     if offer_loaded:
         dismiss_elem = self.browser.find_element_by_xpath(XP.DISMISS_ELEM)
-        nf_click_center_of_element(self, dismiss_elem)
+        nf_click_center_of_element(self, dismiss_elem, skip_action_chain=True)
 
 
 def dismiss_notification_offer(self):
@@ -334,14 +350,41 @@ def dismiss_notification_offer(self):
     offer_loaded = explicit_wait(self, "VOEL", [XP.OFFER_ELEM_LOC, "XPath"], 4, False)
     if offer_loaded:
         dismiss_elem = self.browser.find_element_by_xpath(XP.DISMISS_ELEM_LOC)
-        nf_click_center_of_element(self, dismiss_elem)
+        nf_click_center_of_element(self, dismiss_elem, skip_action_chain=True)
+
+
+def dismiss_home_screen_offer(self):
+    """ Dismiss 'Add Instagram to your Home screen' offer on session start """
+    # wait a bit and see if the 'Add Instagram to your Home screen' offer rises up
+    offer_loaded = explicit_wait(self, "VOEL", [XP.OFFER_ELEM_HOME, "XPath"], 4, False)
+    if offer_loaded:
+        dismiss_elem = self.browser.find_element_by_xpath(XP.DISMISS_ELEM_HOME)
+        nf_click_center_of_element(self, dismiss_elem, skip_action_chain=True)
+
+
+def dismiss_use_app_offer(self):
+    """ Dismiss 'Use the App' offer on session start """
+    # wait a bit and see if the 'Use the App' offer rises up
+    offer_loaded = explicit_wait(self, "VOEL", [XP.OFFER_ELEM_USE, "XPath"], 4, False)
+    if offer_loaded:
+        dismiss_elem = self.browser.find_element_by_xpath(XP.DISMISS_ELEM_USE)
+        nf_click_center_of_element(self, dismiss_elem, skip_action_chain=True)
+
+
+def dismiss_save_login_offer(self):
+    """ Dismiss 'Use the App' offer on session start """
+    # wait a bit and see if the 'Use the App' offer rises up
+    offer_loaded = explicit_wait(self, "VOEL", [XP.OFFER_ELEM_LOGIN, "XPath"], 4, False)
+    if offer_loaded:
+        dismiss_elem = self.browser.find_element_by_xpath(XP.DISMISS_ELEM_LOGIN)
+        nf_click_center_of_element(self, dismiss_elem, skip_action_chain=True)
 
 
 def dismiss_this_was_me(self):
     try:
         # click on "This was me" button if challenge page was called
         this_was_me_button = self.browser.find_element_by_xpath(XP.THIS_WAS_ME_BUTTON)
-        nf_click_center_of_element(self, this_was_me_button)
+        nf_click_center_of_element(self, this_was_me_button, skip_action_chain=True)
     except NoSuchElementException:
         # no verification needed
         pass

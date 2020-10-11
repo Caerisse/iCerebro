@@ -1,5 +1,4 @@
-import platform
-
+from pyvirtualdisplay import Display
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.keys import Keys
@@ -8,6 +7,7 @@ from selenium.webdriver.firefox.options import Options as Firefox_Options
 from selenium.webdriver import Remote
 
 import os
+import platform
 import zipfile
 import shutil
 from os.path import sep
@@ -67,7 +67,7 @@ def create_firefox_extension():
 
 
 @LogDecorator()
-def set_selenium_local_session(
+def set_selenium_local_session_firefox(
     self
 ):
     """Starts local session for a selenium server."""
@@ -145,6 +145,100 @@ def set_selenium_local_session(
 
     # set mobile viewport (iPhone X)
     browser.set_window_size(375, 812)
+
+    self.logger.debug("Selenium session started")
+
+    return browser
+
+
+@LogDecorator()
+def get_chromedriver():
+    # prefer using geckodriver from path
+    chromedriver_path = os.environ.get('CHROMEDRIVER_PATH')
+    if chromedriver_path:
+        return chromedriver_path
+    # if not in path try to find it with shutil
+    chromedriver_path = shutil.which("chromedriver") or shutil.which("chromedriver.exe")
+    if chromedriver_path:
+        return chromedriver_path
+    # if neither use local file according to OS
+    system_name = platform.system()
+    chromedriver_path = './chromedriver/{}/chromedriver{}'.format(system_name, '.exe' if system_name == 'Windows' else '')
+    if os.path.isfile(chromedriver_path):
+        return chromedriver_path
+
+
+@LogDecorator()
+def set_selenium_local_session_chrome(
+        self
+):
+    """Starts local session for a selenium server."""
+
+    # set Chrome Agent to mobile agent
+    user_agent = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 "
+        "(KHTML, like Gecko) CriOS/85.0.4183.109 Mobile/15E148 Safari/604.1"
+    )
+
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument("user-agent={}".format(user_agent))
+    chrome_options.add_argument('--load-extension={}'.format(
+        os.path.abspath(os.path.dirname(__file__) + sep + "firefox_extension"))
+    )
+    # chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--mute-audio")
+    chrome_options.add_argument("--no-default-browser-check")
+    chrome_options.add_argument("--disable-background-networking")
+    chrome_options.add_argument("--disable-sync")
+    chrome_options.add_argument("--metrics-recording-only")
+    chrome_options.add_argument("--no-first-run")
+    chrome_options.add_argument("--disable-add-to-shelf")
+
+    if self.settings.disable_image_load:
+        # Cant load extensions in headless mode so cant hide we are using selenium
+        # chrome_options.add_argument("--headless")
+        # So instead we need to use pyvirtualdisplay
+        self.display = Display(visible=0, size=(375, 812))
+        self.display.start()
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_prefs = {
+            "profile.default_content_settings": {"images": 2},
+            "profile.managed_default_content_settings": {"images": 2}
+        }
+        chrome_options.experimental_options["prefs"] = chrome_prefs
+
+    if self.proxy:
+        self.logger.debug("Using android app proxy on port {}".format(self.proxy.port))
+        chrome_options.add_argument('--proxy-server=socks5://localhost:{}'.format(self.proxy.port))
+        # TODO, test if connection is active in provided port, return None if not
+    elif self.settings.use_proxy:
+        if self.settings.proxy_address and self.settings.proxy_port:
+            self.logger.debug('Using provided proxy: {}:{}'.format(self.settings.proxy_address, self.settings.proxy_port))
+            chrome_options.add_argument('--proxy-server={}:{}'.format(self.settings.proxy_address, self.proxy.port))
+        else:
+            self.logger.error('Bot was asked to use a proxy address but settings are missing')
+            return None
+    else:
+        self.logger.error('No proxy set, please run the iCerebro android app or provide a proxy address to use')
+        # Commented for testing purpose (so it can be run without a proxy using the server ip)
+        # return None
+        self.logger.info('Running without proxy for testing purposes')
+
+    driver_path = get_chromedriver()
+    chrome_path = os.environ.get('CHROME_BIN')
+    if not chrome_path:
+        chrome_path = shutil.which("google-chrome-stable") or shutil.which("google-chrome-stable.exe")
+    chrome_options.binary_location = chrome_path
+    browser = webdriver.Chrome(
+        executable_path=driver_path,
+        options=chrome_options,
+        # desired_capabilities=capabilities,
+    )
+    # set mobile viewport (iPhone X)
+    browser.set_window_size(375, 812)
+
+    browser.implicitly_wait(self.settings.page_delay)
 
     self.logger.debug("Selenium session started")
 
