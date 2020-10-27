@@ -43,6 +43,7 @@
       <w>pgup</w>
       <w>pred</w>
       <w>pyautogui</w>
+      <w>pyvirtualdisplay</w>
       <w>resnet</w>
       <w>resnext</w>
       <w>shufflenet</w>

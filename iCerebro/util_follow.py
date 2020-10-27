@@ -294,7 +294,7 @@ def follow_user(
                     return False, emergency_state
             else:
                 self.logger.warning(
-                    "Couldn't unfollow '{}', unexpected failure".format(user_name)
+                    "Couldn't follow '{}', unexpected failure".format(user_name)
                 )
                 return False, "unexpected failure"
     elif track == "dialog":

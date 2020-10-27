@@ -14,7 +14,7 @@ from iCerebro.navigation import web_address_navigator, explicit_wait, SoftBlocke
 from iCerebro.navigation import nf_click_center_of_element
 from iCerebro.util import check_authorization, sleep_while_blocked
 from iCerebro.util_db import get_cookies, save_cookies
-from util_loggers import LogDecorator
+from iCerebro.util_loggers import LogDecorator
 
 
 @LogDecorator()

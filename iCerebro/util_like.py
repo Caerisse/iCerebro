@@ -92,11 +92,8 @@ def like_loop(
                         likes += 1
                         self.logger.info("[{}] - Like [{}/{}]".format(
                             what, likes, amount))
-                    if msg == "Soft blocked":
-                        sleep_while_blocked(self)
                     if msg == "block on likes":
-                        # TODO deal with block on likes
-                        raise SoftBlockedException
+                        raise SoftBlockedException(msg)
                     else:
                         sleep(1)
                     nf_find_and_press_back(self, base_link)
@@ -110,6 +107,8 @@ def like_loop(
                     self.quota_supervisor.add_server_call()
                     sc_rolled += 1
                     sleep(scroll_nap)
+    except SoftBlockedException:
+        sleep_while_blocked(self)
     except Exception as err:
         self.logger.error("Unexpected Exception: {}".format(err))
     finally:
@@ -138,7 +137,11 @@ def interact_with_post(
             else:
                 self.logger.debug("Validating user")
                 valid, details = nf_validate_user_call(self, user_name, self.quota_supervisor.LIKE, link)
-                self.logger.info("{}Valid User, details: {}".format("" if valid else "Not ", details))
+                self.logger.info("'{}' is{} a valid user{}".format(
+                    user_name,
+                    "" if valid else " not",
+                    "" if valid else ": {}".format(details)
+                ))
 
             if not valid:
                 interactions.not_valid_users += 1
@@ -174,9 +177,9 @@ def interact_with_post(
                 # comment
                 if (
                         self.settings.do_comment
-                        and user_name not in self.settings.dont_include
                         and checked_img
                         and commenting
+                        and user_name not in self.settings.dont_include
                 ):
                     comments = self.settings.comments
                     comments.append(self.settings.video_comments if is_video else self.settings.photo_comments)
@@ -189,40 +192,37 @@ def interact_with_post(
                         self.logger.info("Not commented")
                     sleep(1)
 
-                # follow
-                if (
-                        not user_validated
-                        and self.settings.do_follow
-                        and user_name not in self.settings.dont_include
-                        and checked_img
-                        and following
-                        and not is_follow_restricted(self, user_name)
-                ):
-                    self.logger.debug("Following user")
-                    sleep(1)
-                    follow_state, msg = follow_user(self, "post", user_name, None)
-                    if follow_state is True:
-                        interactions.followed += 1
-                    elif msg == "already followed":
-                        interactions.already_followed += 1
-                else:
-                    if self.settings.do_follow and not user_validated:
-                        self.logger.info("Not followed")
-                    sleep(1)
+                # follow or interact only of user not previously validated to avoid recursion
+                if not user_validated:
+                    # follow
+                    if (
+                            self.settings.do_follow
+                            and checked_img
+                            and following
+                            and user_name not in self.settings.dont_include
+                            and not is_follow_restricted(self, user_name)
+                    ):
+                        self.logger.debug("Following user")
+                        follow_state, msg = follow_user(self, "post", user_name, None)
+                        if follow_state is True:
+                            interactions.followed += 1
+                        elif msg == "already followed":
+                            interactions.already_followed += 1
+                        sleep(1)
 
-                # interact (only of user not previously validated to impede recursion)
-                if interact and not user_validated:
-                    self.logger.info("Interacting with user '{}'".format(user_name))
-                    user_link = "https://www.instagram.com/{}/".format(user_name)
-                    if not check_if_in_correct_page(self, user_link):
-                        nf_go_from_post_to_profile(self, user_name)
-                    interactions += like_loop(
-                        self,
-                        "Interact with user '{}'".format(user_name),
-                        user_link,
-                        self.settings.user_interact_amount,
-                        True
-                    )
+                    # interact
+                    if self.settings.do_like and interact:
+                        self.logger.info("Interacting with user '{}'".format(user_name))
+                        user_link = "https://www.instagram.com/{}/".format(user_name)
+                        if not check_if_in_correct_page(self, user_link):
+                            nf_go_from_post_to_profile(self, user_name)
+                        interactions += like_loop(
+                            self,
+                            "Interact with user '{}'".format(user_name),
+                            user_link,
+                            self.settings.user_interact_amount,
+                            True
+                        )
 
             elif msg == "already liked":
                 interactions.already_liked += 1
@@ -247,8 +247,6 @@ def interact_with_post(
     except NoSuchElementException as err:
         self.logger.error("Invalid Page: {}".format(err))
         return "Invalid Page", interactions
-    except SoftBlockedException:
-        return "Soft blocked", interactions
     except Exception as err:
         self.logger.error("Unexpected Exception: {}".format(err))
         return "Unexpected Exception", interactions
